@@ -41,8 +41,8 @@ export default function RegisterPage() {
 
   const onSubmit = (data: RegisterFormValues) => {
     registerMutation.mutate({ data }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      onSuccess: async () => {
+        await queryClient.refetchQueries({ queryKey: getGetMeQueryKey() });
         toast({ title: "Conta criada!", description: "Bem-vindo à Nexa." });
         setLocation("/chat");
       },

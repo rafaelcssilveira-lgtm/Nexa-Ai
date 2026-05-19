@@ -40,8 +40,8 @@ export default function LoginPage() {
 
   const onSubmit = (data: LoginFormValues) => {
     loginMutation.mutate({ data }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      onSuccess: async () => {
+        await queryClient.refetchQueries({ queryKey: getGetMeQueryKey() });
         toast({ title: "Bem-vindo de volta!", description: "Login realizado com sucesso." });
         setLocation("/chat");
       },
