@@ -3,20 +3,32 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Nexa AI SaaS API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: conversations
+    description: Conversation management
+  - name: messages
+    description: Chat messages
+  - name: plans
+    description: Subscription plans
+  - name: payments
+    description: Payment operations
+  - name: users
+    description: User profile operations
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +36,509 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: registerUser
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRegisterInput"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: loginUser
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserLoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logoutUser
+      tags: [auth]
+      summary: Logout current user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List all conversations for current user
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationInput"
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations/{id}:
+    delete:
+      operationId: deleteConversation
+      tags: [conversations]
+      summary: Delete a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations/{id}/messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: List messages in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message and get AI response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: AI response message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /plans:
+    get:
+      operationId: listPlans
+      tags: [plans]
+      summary: List available subscription plans
+      responses:
+        "200":
+          description: Available plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+
+  /users/me:
+    get:
+      operationId: getUserProfile
+      tags: [users]
+      summary: Get current user profile with usage stats
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /payments/create-preference:
+    post:
+      operationId: createPaymentPreference
+      tags: [payments]
+      summary: Create a Mercado Pago payment preference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentPreferenceInput"
+      responses:
+        "200":
+          description: Payment preference created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentPreference"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /webhook/mercadopago:
+    post:
+      operationId: mercadoPagoWebhook
+      tags: [payments]
+      summary: Mercado Pago payment webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookPayload"
+      responses:
+        "200":
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    UserRegisterInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+
+    UserLoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthUser:
+      type: object
+      required: [id, name, email, plan, dailyMessagesUsed, dailyLimit, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        plan:
+          type: string
+          enum: [free, pro]
+        dailyMessagesUsed:
+          type: integer
+        dailyLimit:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    UserProfile:
+      type: object
+      required: [id, name, email, plan, dailyMessagesUsed, dailyLimit, totalConversations, totalMessages, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        plan:
+          type: string
+          enum: [free, pro]
+        dailyMessagesUsed:
+          type: integer
+        dailyLimit:
+          type: integer
+        totalConversations:
+          type: integer
+        totalMessages:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    Conversation:
+      type: object
+      required: [id, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        messageCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ConversationInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+
+    Message:
+      type: object
+      required: [id, conversationId, role, content, createdAt]
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    MessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+
+    ChatResponse:
+      type: object
+      required: [userMessage, assistantMessage, dailyMessagesUsed, dailyLimit]
+      properties:
+        userMessage:
+          $ref: "#/components/schemas/Message"
+        assistantMessage:
+          $ref: "#/components/schemas/Message"
+        dailyMessagesUsed:
+          type: integer
+        dailyLimit:
+          type: integer
+
+    Plan:
+      type: object
+      required: [id, name, price, currency, features, dailyLimit]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        currency:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        dailyLimit:
+          type: integer
+        recommended:
+          type: boolean
+
+    PaymentPreferenceInput:
+      type: object
+      required: [planId]
+      properties:
+        planId:
+          type: string
+
+    PaymentPreference:
+      type: object
+      required: [id, initPoint, sandboxInitPoint]
+      properties:
+        id:
+          type: string
+        initPoint:
+          type: string
+        sandboxInitPoint:
+          type: string
+
+    WebhookPayload:
+      type: object
+      properties:
+        type:
+          type: string
+        data:
+          type: object
+          properties:
+            id:
+              type: string
