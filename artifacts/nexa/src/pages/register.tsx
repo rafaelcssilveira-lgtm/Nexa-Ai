@@ -4,12 +4,13 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRegisterUser, getGetMeQueryKey } from "@workspace/api-client-react";
+import type { AuthUser } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { MessageSquare, Loader2, ArrowRight, Check, Zap, Shield, BrainCircuit } from "lucide-react";
+import { MessageSquare, Loader2, ArrowRight, Check, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
 const registerSchema = z.object({
@@ -21,10 +22,10 @@ const registerSchema = z.object({
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 const perks = [
-  { icon: <Zap size={16} className="text-yellow-400" />, text: "Respostas instantâneas" },
-  { icon: <BrainCircuit size={16} className="text-primary" />, text: "Memória de contexto avançada" },
-  { icon: <Shield size={16} className="text-emerald-400" />, text: "100% privado e seguro" },
-  { icon: <Check size={16} className="text-primary" />, text: "Grátis para começar" },
+  "10 mensagens por dia no plano grátis",
+  "Análise de imagens com IA",
+  "Histórico de conversas salvo",
+  "Upgrade para ilimitado a qualquer hora",
 ];
 
 export default function RegisterPage() {
@@ -41,9 +42,8 @@ export default function RegisterPage() {
 
   const onSubmit = (data: RegisterFormValues) => {
     registerMutation.mutate({ data }, {
-      onSuccess: async () => {
-        await queryClient.refetchQueries({ queryKey: getGetMeQueryKey() });
-        toast({ title: "Conta criada!", description: "Bem-vindo à Nexa." });
+      onSuccess: (userData) => {
+        queryClient.setQueryData(getGetMeQueryKey(), userData as AuthUser);
         setLocation("/chat");
       },
       onError: (error) => {
@@ -58,67 +58,92 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-background overflow-hidden">
-      <div className="hidden md:flex md:w-1/2 relative flex-col items-center justify-center p-12 border-r border-white/[0.06] overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:48px_48px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-primary/8 rounded-full blur-3xl" />
+    <div className="min-h-screen flex bg-background">
+      {/* Left panel — desktop only */}
+      <div className="hidden lg:flex lg:w-[52%] relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0d0d18] via-background to-background" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:56px_56px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[480px] h-[480px] rounded-full bg-primary/10 blur-[100px]" />
+        <div className="absolute bottom-20 right-20 w-48 h-48 bg-violet-500/8 rounded-full blur-3xl" />
 
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 flex flex-col items-center gap-10 max-w-sm w-full text-center"
-        >
-          <div>
-            <div className="w-14 h-14 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-primary/20">
-              <MessageSquare size={26} className="text-primary" strokeWidth={2} />
+        <div className="relative z-10 flex flex-col justify-center px-16 w-full">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="space-y-10"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center shadow-2xl shadow-primary/40">
+                <MessageSquare size={20} strokeWidth={2.5} className="text-white" />
+              </div>
+              <span className="text-2xl font-bold tracking-tight">Nexa</span>
             </div>
-            <h2 className="text-3xl font-extrabold tracking-tight">Nexa</h2>
-            <p className="text-muted-foreground text-sm mt-1.5">Crie sua conta e comece agora</p>
-          </div>
 
-          <div className="w-full space-y-3">
-            <p className="text-xs text-muted-foreground/60 uppercase tracking-widest font-semibold mb-4">
-              O que você ganha
-            </p>
-            {perks.map((perk, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 + i * 0.15, duration: 0.5 }}
-                className="flex items-center gap-3 bg-white/[0.03] border border-white/[0.06] rounded-xl px-4 py-3"
-              >
-                <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center shrink-0">
-                  {perk.icon}
-                </div>
-                <span className="text-sm text-foreground/80">{perk.text}</span>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
+            <div className="space-y-4">
+              <h1 className="text-5xl font-extrabold tracking-tighter leading-tight">
+                Comece de graça.<br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-violet-400 to-blue-400">
+                  Evolua sem limites.
+                </span>
+              </h1>
+              <p className="text-muted-foreground text-lg leading-relaxed max-w-sm">
+                Crie sua conta grátis e descubra o que a inteligência artificial pode fazer por você.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {perks.map((perk, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + i * 0.1, duration: 0.4 }}
+                  className="flex items-center gap-3"
+                >
+                  <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
+                    <Check size={12} className="text-primary" />
+                  </div>
+                  <span className="text-sm text-muted-foreground">{perk}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
+              <Sparkles size={16} className="text-primary shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                <span className="text-foreground font-medium">Sem cartão de crédito</span> — comece grátis hoje mesmo.
+              </p>
+            </div>
+          </motion.div>
+        </div>
       </div>
 
-      <div className="w-full md:w-1/2 flex items-center justify-center p-5 sm:p-8">
+      {/* Right panel — form */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 relative">
+        <div className="lg:hidden absolute top-0 left-1/2 -translate-x-1/2 w-72 h-48 bg-primary/8 rounded-full blur-3xl pointer-events-none" />
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full max-w-sm space-y-7"
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-[380px] space-y-7 relative z-10"
         >
-          <div className="md:hidden flex flex-col items-center gap-3 mb-2">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
-                <MessageSquare size={17} className="text-white" strokeWidth={2.5} />
+          {/* Mobile brand */}
+          <div className="lg:hidden flex flex-col items-center gap-3 pb-1">
+            <Link href="/">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-xl shadow-primary/30">
+                  <MessageSquare size={18} strokeWidth={2.5} className="text-white" />
+                </div>
+                <span className="text-2xl font-bold tracking-tight">Nexa</span>
               </div>
-              <span className="font-bold text-xl">Nexa</span>
             </Link>
           </div>
 
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Criar conta grátis</h1>
-            <p className="text-muted-foreground text-sm mt-1.5">10 mensagens por dia, sem cartão de crédito</p>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Criar conta grátis</h2>
+            <p className="text-muted-foreground mt-1.5 text-sm">Sem cartão de crédito. Comece agora.</p>
           </div>
 
           <Form {...form}>
@@ -128,16 +153,17 @@ export default function RegisterPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-medium text-foreground/80">Nome</FormLabel>
+                    <FormLabel className="text-sm font-medium">Nome</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="Seu nome"
+                        autoComplete="name"
                         {...field}
                         data-testid="input-name"
-                        className="h-11 bg-white/[0.04] border-white/10 focus-visible:border-primary/50 focus-visible:ring-primary/20 transition-colors"
+                        className="h-11 bg-white/[0.04] border-white/[0.1] focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/30 transition-all placeholder:text-muted-foreground/40"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs" />
                   </FormItem>
                 )}
               />
@@ -146,17 +172,18 @@ export default function RegisterPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-medium text-foreground/80">Email</FormLabel>
+                    <FormLabel className="text-sm font-medium">Email</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="seu@email.com"
                         type="email"
+                        autoComplete="email"
                         {...field}
                         data-testid="input-email"
-                        className="h-11 bg-white/[0.04] border-white/10 focus-visible:border-primary/50 focus-visible:ring-primary/20 transition-colors"
+                        className="h-11 bg-white/[0.04] border-white/[0.1] focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/30 transition-all placeholder:text-muted-foreground/40"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs" />
                   </FormItem>
                 )}
               />
@@ -165,17 +192,18 @@ export default function RegisterPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-medium text-foreground/80">Senha</FormLabel>
+                    <FormLabel className="text-sm font-medium">Senha</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="••••••••"
+                        placeholder="Mínimo 6 caracteres"
                         type="password"
+                        autoComplete="new-password"
                         {...field}
                         data-testid="input-password"
-                        className="h-11 bg-white/[0.04] border-white/10 focus-visible:border-primary/50 focus-visible:ring-primary/20 transition-colors"
+                        className="h-11 bg-white/[0.04] border-white/[0.1] focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/30 transition-all placeholder:text-muted-foreground/40"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs" />
                   </FormItem>
                 )}
               />
@@ -183,7 +211,7 @@ export default function RegisterPage() {
               <div className="pt-1">
                 <Button
                   type="submit"
-                  className="w-full h-11 font-semibold gap-2 shadow-lg shadow-primary/20"
+                  className="w-full h-11 font-semibold gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow text-base"
                   disabled={registerMutation.isPending}
                   data-testid="button-submit-register"
                 >
@@ -197,9 +225,9 @@ export default function RegisterPage() {
             </form>
           </Form>
 
-          <div className="text-sm text-muted-foreground text-center">
+          <div className="text-sm text-center text-muted-foreground">
             Já tem uma conta?{" "}
-            <Link href="/login" className="text-primary hover:underline font-medium" data-testid="link-go-to-login">
+            <Link href="/login" className="text-primary hover:text-primary/80 font-semibold transition-colors" data-testid="link-go-to-login">
               Entrar
             </Link>
           </div>
