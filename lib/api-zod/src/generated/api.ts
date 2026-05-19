@@ -118,6 +118,7 @@ export const ListMessagesResponseItem = zod.object({
   "conversationId": zod.number(),
   "role": zod.enum(['user', 'assistant']),
   "content": zod.string(),
+  "imageUrl": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListMessagesResponse = zod.array(ListMessagesResponseItem)
@@ -134,7 +135,8 @@ export const SendMessageParams = zod.object({
 
 
 export const SendMessageBody = zod.object({
-  "content": zod.string().min(1)
+  "content": zod.string().min(1),
+  "imageBase64": zod.string().nullish()
 })
 
 

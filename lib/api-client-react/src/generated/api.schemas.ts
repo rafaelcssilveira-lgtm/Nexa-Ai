@@ -95,12 +95,14 @@ export interface Message {
   conversationId: number;
   role: MessageRole;
   content: string;
+  imageUrl?: string | null;
   createdAt: string;
 }
 
 export interface MessageInput {
   /** @minLength 1 */
   content: string;
+  imageBase64?: string | null;
 }
 
 export interface ChatResponse {

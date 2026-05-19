@@ -12,5 +12,6 @@ export interface Message {
   conversationId: number;
   role: MessageRole;
   content: string;
+  imageUrl?: string | null;
   createdAt: Date;
 }

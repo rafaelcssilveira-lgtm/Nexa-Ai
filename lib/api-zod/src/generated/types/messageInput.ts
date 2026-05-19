@@ -9,4 +9,5 @@
 export interface MessageInput {
   /** @minLength 1 */
   content: string;
+  imageBase64?: string | null;
 }

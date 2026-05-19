@@ -22,7 +22,7 @@ router.get("/conversations/:id/messages", requireAuth, async (req, res): Promise
     .where(and(eq(conversationsTable.id, params.data.id), eq(conversationsTable.userId, userId)));
 
   if (!conversation) {
-    res.status(404).json({ error: "Conversation not found" });
+    res.status(404).json({ error: "Conversa não encontrada" });
     return;
   }
 
@@ -56,13 +56,13 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     .where(and(eq(conversationsTable.id, params.data.id), eq(conversationsTable.userId, userId)));
 
   if (!conversation) {
-    res.status(404).json({ error: "Conversation not found" });
+    res.status(404).json({ error: "Conversa não encontrada" });
     return;
   }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user) {
-    res.status(401).json({ error: "User not found" });
+    res.status(401).json({ error: "Usuário não encontrado" });
     return;
   }
 
@@ -79,21 +79,28 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   const dailyLimit = getDailyLimit(user.plan);
 
   if (dailyMessagesUsed >= dailyLimit) {
-    res.status(429).json({ error: `Daily message limit reached (${dailyLimit} messages). Upgrade to PRO for unlimited messages.` });
+    res.status(429).json({
+      error: `Limite diário de ${dailyLimit} mensagens atingido. Faça upgrade para PRO para mensagens ilimitadas.`,
+    });
     return;
   }
+
+  const { content, imageBase64 } = body.data;
+
+  const imageUrl = imageBase64 ? `data:image/jpeg;base64,${imageBase64}` : null;
 
   const [userMessage] = await db
     .insert(messagesTable)
     .values({
       conversationId: params.data.id,
       role: "user",
-      content: body.data.content,
+      content,
+      imageUrl,
     })
     .returning();
 
   if (!userMessage) {
-    res.status(500).json({ error: "Failed to save message" });
+    res.status(500).json({ error: "Falha ao salvar mensagem" });
     return;
   }
 
@@ -108,7 +115,7 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     content: m.content,
   }));
 
-  const aiContent = await generateAiResponse(aiMessages, user.plan === "pro");
+  const aiContent = await generateAiResponse(aiMessages, user.plan === "pro", imageBase64 ?? undefined);
 
   const [assistantMessage] = await db
     .insert(messagesTable)
@@ -120,7 +127,7 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     .returning();
 
   if (!assistantMessage) {
-    res.status(500).json({ error: "Failed to save AI response" });
+    res.status(500).json({ error: "Falha ao salvar resposta da IA" });
     return;
   }
 

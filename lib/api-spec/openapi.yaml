@@ -468,6 +468,9 @@ components:
           enum: [user, assistant]
         content:
           type: string
+        imageUrl:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -479,6 +482,9 @@ components:
         content:
           type: string
           minLength: 1
+        imageBase64:
+          type: string
+          nullable: true
 
     ChatResponse:
       type: object
