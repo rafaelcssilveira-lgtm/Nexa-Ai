@@ -2,8 +2,12 @@ import React from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TerminalSquare, Activity, MessageSquare, Database, Clock, CreditCard } from "lucide-react";
+import { User, BarChart2, MessageSquare, Layers, Calendar, CreditCard, Sparkles } from "lucide-react";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { motion } from "framer-motion";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 
 export default function ProfilePage() {
   const { data: profile, isLoading } = useGetUserProfile({
@@ -12,110 +16,134 @@ export default function ProfilePage() {
 
   return (
     <AppLayout>
-      <div className="flex-1 overflow-y-auto px-6 py-12">
-        <div className="max-w-3xl mx-auto space-y-8">
-          
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight mb-2">Operator Dossier</h1>
-            <p className="text-sm text-muted-foreground font-mono">SYSTEM_RECORD_ID: {profile?.id || '---'}</p>
-          </div>
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-10 md:py-14">
+        <div className="max-w-2xl mx-auto space-y-6">
+
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            <h1 className="text-2xl font-bold tracking-tight">Meu perfil</h1>
+            <p className="text-sm text-muted-foreground mt-1">Suas informações e estatísticas de uso</p>
+          </motion.div>
 
           {isLoading ? (
-            <div className="space-y-6">
-              <Skeleton className="h-48 w-full bg-card border border-white/5 rounded-xl" />
-              <div className="grid md:grid-cols-2 gap-4">
-                <Skeleton className="h-32 bg-card border border-white/5 rounded-xl" />
-                <Skeleton className="h-32 bg-card border border-white/5 rounded-xl" />
+            <div className="space-y-4">
+              <Skeleton className="h-36 w-full rounded-2xl bg-card border border-white/5" />
+              <div className="grid grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-28 rounded-2xl bg-card border border-white/5" />
+                ))}
               </div>
             </div>
           ) : profile ? (
             <>
-              {/* Identity Card */}
-              <div className="bg-card border border-white/5 rounded-xl p-8 shadow-xl relative overflow-hidden">
-                <div className="absolute -right-8 -top-8 text-white/5 pointer-events-none">
-                  <TerminalSquare size={120} />
-                </div>
-                
-                <div className="flex items-start gap-6 relative z-10">
-                  <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary text-2xl font-bold uppercase">
+              {/* Profile card */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.05 }}
+                className="relative bg-card border border-white/[0.07] rounded-2xl p-6 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(99,102,241,0.08),transparent)] pointer-events-none" />
+                <div className="relative z-10 flex items-center gap-5">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-xl font-bold uppercase shrink-0 shadow-lg shadow-primary/10">
                     {profile.name.substring(0, 2)}
                   </div>
-                  
-                  <div className="space-y-1">
-                    <h2 className="text-3xl font-bold tracking-tight text-foreground">{profile.name}</h2>
-                    <div className="text-muted-foreground font-mono">{profile.email}</div>
-                    <div className="pt-2 flex items-center gap-2">
-                      <span className={`px-2.5 py-0.5 rounded text-xs font-mono font-bold tracking-wider ${
-                        profile.plan === 'pro' 
-                          ? 'bg-primary/20 text-primary border border-primary/30' 
-                          : 'bg-white/10 text-white/70 border border-white/10'
-                      }`}>
-                        CLEARANCE: {profile.plan.toUpperCase()}
-                      </span>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock size={12} /> Init: {format(new Date(profile.createdAt), "MMM dd, yyyy")}
-                      </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-xl font-bold tracking-tight truncate">{profile.name}</h2>
+                      {profile.plan === "pro" ? (
+                        <span className="flex items-center gap-1 bg-primary/15 text-primary border border-primary/25 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          <Sparkles size={9} /> PRO
+                        </span>
+                      ) : (
+                        <span className="bg-white/[0.06] text-muted-foreground border border-white/[0.08] text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase">
+                          Free
+                        </span>
+                      )}
                     </div>
+                    <p className="text-sm text-muted-foreground truncate mt-0.5">{profile.email}</p>
+                    <p className="text-xs text-muted-foreground/50 mt-1.5 flex items-center gap-1">
+                      <Calendar size={11} />
+                      Membro desde {format(new Date(profile.createdAt), "MMMM 'de' yyyy", { locale: ptBR })}
+                    </p>
                   </div>
                 </div>
-              </div>
+                {profile.plan === "free" && (
+                  <div className="relative z-10 mt-5 pt-4 border-t border-white/[0.06] flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Faça upgrade para acesso ilimitado</p>
+                    <Link href="/plans">
+                      <Button size="sm" className="h-7 text-xs gap-1.5 shadow-md shadow-primary/15">
+                        <Sparkles size={11} /> Assinar Pro
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </motion.div>
 
-              {/* Stats Grid */}
-              <h3 className="text-sm font-mono tracking-widest text-muted-foreground uppercase pt-4">Telemetry_Data</h3>
-              
-              <div className="grid md:grid-cols-2 gap-6">
-                <StatCard 
-                  icon={<Activity className="text-emerald-500" />}
-                  title="Daily Utilization"
-                  value={`${profile.dailyMessagesUsed} / ${profile.dailyLimit}`}
-                  subtitle="Messages processed in current cycle"
-                />
-                
-                <StatCard 
-                  icon={<Database className="text-primary" />}
-                  title="Total Operations"
-                  value={profile.totalMessages.toString()}
-                  subtitle="Lifetime messages executed"
-                />
-                
-                <StatCard 
-                  icon={<MessageSquare className="text-blue-500" />}
-                  title="Session Count"
-                  value={profile.totalConversations.toString()}
-                  subtitle="Unique conversational vectors"
-                />
-                
-                <StatCard 
-                  icon={<CreditCard className="text-yellow-500" />}
-                  title="Current Plan"
-                  value={profile.plan.toUpperCase()}
-                  subtitle="Active subscription tier"
-                />
+              {/* Stats grid */}
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  {
+                    icon: <BarChart2 size={18} className="text-emerald-400" />,
+                    bg: "bg-emerald-400/10 border-emerald-400/15",
+                    label: "Uso hoje",
+                    value: `${profile.dailyMessagesUsed} / ${profile.dailyLimit}`,
+                    sub: "mensagens no dia",
+                    delay: 0.1,
+                  },
+                  {
+                    icon: <MessageSquare size={18} className="text-primary" />,
+                    bg: "bg-primary/10 border-primary/15",
+                    label: "Total de mensagens",
+                    value: profile.totalMessages.toLocaleString("pt-BR"),
+                    sub: "mensagens enviadas",
+                    delay: 0.15,
+                  },
+                  {
+                    icon: <Layers size={18} className="text-blue-400" />,
+                    bg: "bg-blue-400/10 border-blue-400/15",
+                    label: "Conversas",
+                    value: profile.totalConversations.toLocaleString("pt-BR"),
+                    sub: "conversas criadas",
+                    delay: 0.2,
+                  },
+                  {
+                    icon: <CreditCard size={18} className="text-violet-400" />,
+                    bg: "bg-violet-400/10 border-violet-400/15",
+                    label: "Plano atual",
+                    value: profile.plan === "pro" ? "Pro" : "Free",
+                    sub: profile.plan === "pro" ? "acesso ilimitado" : "upgrade disponível",
+                    delay: 0.25,
+                  },
+                ].map((stat, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: stat.delay }}
+                    className="bg-card border border-white/[0.07] rounded-2xl p-5 flex flex-col gap-3"
+                  >
+                    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center ${stat.bg}`}>
+                      {stat.icon}
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold mb-1">
+                        {stat.label}
+                      </p>
+                      <p className="text-2xl font-bold tracking-tight leading-none">{stat.value}</p>
+                      <p className="text-xs text-muted-foreground/50 mt-1">{stat.sub}</p>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             </>
           ) : (
-            <div className="text-center py-12 text-muted-foreground font-mono">
-              RECORD_NOT_FOUND
+            <div className="text-center py-16 text-muted-foreground">
+              <User size={32} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm">Perfil não encontrado</p>
             </div>
           )}
-
         </div>
       </div>
     </AppLayout>
-  );
-}
-
-function StatCard({ icon, title, value, subtitle }: { icon: React.ReactNode, title: string, value: string, subtitle: string }) {
-  return (
-    <div className="bg-card border border-white/5 rounded-xl p-6 flex flex-col gap-4">
-      <div className="flex items-center gap-3 text-muted-foreground">
-        {icon}
-        <span className="font-mono text-sm tracking-widest uppercase">{title}</span>
-      </div>
-      <div>
-        <div className="text-3xl font-bold font-mono tracking-tight">{value}</div>
-        <div className="text-sm text-muted-foreground mt-1">{subtitle}</div>
-      </div>
-    </div>
   );
 }

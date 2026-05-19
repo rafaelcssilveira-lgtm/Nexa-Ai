@@ -3,12 +3,10 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useLogoutUser, getGetMeQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageSquarePlus, Settings, LogOut, MessageSquare, CreditCard, ChevronRight } from "lucide-react";
+import { PenSquare, LogOut, MessageSquare, CreditCard, User, Sparkles, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 export const SidebarContext = createContext({ openSidebar: () => {} });
@@ -20,14 +18,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarContext.Provider value={{ openSidebar: () => setMobileOpen(true) }}>
       <div className="flex h-screen w-full overflow-hidden bg-background">
-        <div className="hidden md:flex flex-col w-72 border-r border-white/5 bg-sidebar h-full z-10 shrink-0">
+        <div className="hidden md:flex flex-col w-64 border-r border-white/[0.05] bg-sidebar h-full z-10 shrink-0">
           <SidebarContent onClose={() => {}} />
         </div>
 
         <Sheet open={isMobileOpen} onOpenChange={setMobileOpen}>
           <SheetContent
             side="left"
-            className="p-0 w-[280px] bg-sidebar border-r border-white/5 [&>button]:hidden"
+            className="p-0 w-[260px] bg-sidebar border-r border-white/[0.05] [&>button]:hidden"
           >
             <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
             <SidebarContent onClose={() => setMobileOpen(false)} />
@@ -63,129 +61,149 @@ function SidebarContent({ onClose }: { onClose: () => void }) {
     });
   };
 
-  const usagePercent = user ? Math.min((user.dailyMessagesUsed / user.dailyLimit) * 100, 100) : 0;
+  const usagePct = user ? Math.min((user.dailyMessagesUsed / user.dailyLimit) * 100, 100) : 0;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 flex items-center justify-between border-b border-white/5 shrink-0">
+    <div className="flex flex-col h-full select-none">
+      {/* Brand header */}
+      <div className="h-14 flex items-center justify-between px-4 border-b border-white/[0.05] shrink-0">
         <Link
           href="/chat"
           onClick={onClose}
-          className="flex items-center gap-2 text-sidebar-foreground hover:text-primary transition-colors"
+          className="flex items-center gap-2.5 group"
         >
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-lg shadow-primary/25">
-            <MessageSquare size={15} strokeWidth={2.5} className="text-white" />
+          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shadow-md shadow-primary/30 group-hover:shadow-primary/50 transition-shadow">
+            <MessageSquare size={13} strokeWidth={2.5} className="text-white" />
           </div>
-          <span className="font-bold tracking-tight text-lg">Nexa</span>
+          <span className="font-bold tracking-tight text-[1.05rem]">Nexa</span>
         </Link>
         {user?.plan === "pro" && (
-          <Badge
-            variant="default"
-            className="bg-primary/20 text-primary border-primary/30 font-semibold text-[10px] px-1.5"
+          <span
+            className="flex items-center gap-1 bg-primary/15 text-primary border border-primary/20 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
             data-testid="badge-pro"
           >
-            PRO
-          </Badge>
+            <Sparkles size={9} /> PRO
+          </span>
         )}
       </div>
 
-      <div className="p-3 shrink-0">
+      {/* New chat button */}
+      <div className="px-3 pt-3 pb-1 shrink-0">
         <Link href="/chat" onClick={onClose}>
           <Button
-            variant="default"
-            className="w-full justify-start text-sm gap-2 bg-white/5 text-sidebar-foreground hover:bg-white/10 border border-white/5 hover:border-white/10 shadow-none"
+            variant="ghost"
+            className="w-full justify-between text-[13px] gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-white/[0.06] border border-white/[0.06] hover:border-white/[0.1] h-9 px-3 rounded-xl transition-all"
             data-testid="button-new-chat"
           >
-            <MessageSquarePlus size={15} />
-            Nova conversa
+            <span>Nova conversa</span>
+            <PenSquare size={14} className="opacity-60" />
           </Button>
         </Link>
       </div>
 
+      {/* Conversations */}
+      <div className="px-2 pt-4 pb-1 shrink-0">
+        <p className="text-[10px] uppercase font-semibold text-sidebar-foreground/30 tracking-widest px-2 mb-1">
+          Histórico
+        </p>
+      </div>
+
       <ScrollArea className="flex-1 px-2">
         <div className="space-y-0.5 pb-2">
-          <div className="px-2 py-2 text-[10px] uppercase font-semibold text-sidebar-foreground/40 tracking-widest">
-            Histórico
-          </div>
           {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="px-2 py-2">
-                <Skeleton className="h-4 w-full bg-white/5 rounded" />
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="px-2 py-2.5">
+                <Skeleton className="h-3.5 w-full bg-white/[0.04] rounded" />
               </div>
             ))
           ) : !conversations?.length ? (
-            <div className="px-3 py-6 text-xs text-sidebar-foreground/30 text-center">
-              Nenhuma conversa ainda
+            <div className="py-8 text-center">
+              <MessageSquare size={22} className="mx-auto mb-2 text-sidebar-foreground/15" />
+              <p className="text-xs text-sidebar-foreground/25">Nenhuma conversa ainda</p>
             </div>
           ) : (
-            conversations.map((conv) => (
-              <Link key={conv.id} href={`/chat/${conv.id}`} onClick={onClose}>
-                <div
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate cursor-pointer transition-all flex items-center gap-2 group ${
-                    location === `/chat/${conv.id}`
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-sidebar-foreground/60 hover:bg-white/5 hover:text-sidebar-foreground"
-                  }`}
-                  data-testid={`link-conversation-${conv.id}`}
-                >
-                  <MessageSquare size={13} className="opacity-40 shrink-0" />
-                  <span className="truncate">{conv.title}</span>
-                </div>
-              </Link>
-            ))
+            conversations.map((conv) => {
+              const isActive = location === `/chat/${conv.id}`;
+              return (
+                <Link key={conv.id} href={`/chat/${conv.id}`} onClick={onClose}>
+                  <div
+                    className={`w-full text-left px-3 py-2 rounded-xl text-[13px] truncate cursor-pointer transition-all flex items-center gap-2 group ${
+                      isActive
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-sidebar-foreground/50 hover:bg-white/[0.05] hover:text-sidebar-foreground/80"
+                    }`}
+                    data-testid={`link-conversation-${conv.id}`}
+                  >
+                    <MessageSquare
+                      size={12}
+                      className={`shrink-0 transition-opacity ${isActive ? "opacity-70" : "opacity-30 group-hover:opacity-50"}`}
+                    />
+                    <span className="truncate">{conv.title}</span>
+                  </div>
+                </Link>
+              );
+            })
           )}
         </div>
       </ScrollArea>
 
-      <div className="mt-auto border-t border-white/5 p-3 flex flex-col gap-2 shrink-0">
+      {/* Bottom section */}
+      <div className="border-t border-white/[0.05] p-3 space-y-2 shrink-0">
+        {/* Usage bar for FREE plan */}
         {user?.plan === "free" && (
-          <div className="bg-black/20 rounded-xl p-3 border border-white/5">
-            <div className="flex justify-between text-[10px] font-medium text-sidebar-foreground/50 mb-1.5">
+          <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3 space-y-2">
+            <div className="flex justify-between items-center text-[11px] text-sidebar-foreground/40 font-medium">
               <span>Uso diário</span>
-              <span>
-                {user.dailyMessagesUsed}/{user.dailyLimit}
-              </span>
+              <span>{user.dailyMessagesUsed}/{user.dailyLimit}</span>
             </div>
-            <Progress value={usagePercent} className="h-1 bg-white/5" />
+            <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary/60 rounded-full transition-all duration-500"
+                style={{ width: `${usagePct}%` }}
+              />
+            </div>
             <Link href="/plans" onClick={onClose}>
               <Button
-                variant="link"
-                className="w-full text-xs text-primary h-auto p-0 mt-2.5 justify-between font-medium"
+                variant="ghost"
+                size="sm"
+                className="w-full h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 justify-between px-1 mt-0.5"
                 data-testid="button-upgrade-sidebar"
               >
-                Fazer upgrade <ChevronRight size={12} />
+                <span className="flex items-center gap-1"><Sparkles size={10} /> Upgrade Pro</span>
+                <ChevronRight size={12} />
               </Button>
             </Link>
           </div>
         )}
 
-        <div className="flex flex-col gap-0.5">
+        {/* Nav links */}
+        <div className="space-y-0.5">
           <Link href="/profile" onClick={onClose}>
             <Button
               variant="ghost"
-              className="w-full justify-start text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/5 gap-2 h-9 px-2 text-sm"
+              className="w-full justify-start text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-white/[0.05] gap-2.5 h-9 px-3 text-[13px] rounded-xl"
               data-testid="link-profile"
             >
-              <Settings size={15} />
-              <span className="truncate flex-1 text-left">{user?.name}</span>
+              <User size={14} />
+              <span className="truncate flex-1 text-left">{user?.name || "Perfil"}</span>
             </Button>
           </Link>
           <Link href="/plans" onClick={onClose}>
             <Button
               variant="ghost"
-              className="w-full justify-start text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-white/5 gap-2 h-9 px-2 text-sm"
+              className="w-full justify-start text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-white/[0.05] gap-2.5 h-9 px-3 text-[13px] rounded-xl"
               data-testid="link-plans"
             >
-              <CreditCard size={15} /> Assinatura
+              <CreditCard size={14} /> Assinatura
             </Button>
           </Link>
           <Button
             variant="ghost"
-            className="w-full justify-start text-sidebar-foreground/60 hover:text-destructive hover:bg-destructive/10 gap-2 h-9 px-2 text-sm"
+            className="w-full justify-start text-sidebar-foreground/50 hover:text-destructive hover:bg-destructive/10 gap-2.5 h-9 px-3 text-[13px] rounded-xl"
             onClick={handleLogout}
             data-testid="button-logout"
           >
-            <LogOut size={15} /> Sair
+            <LogOut size={14} /> Sair
           </Button>
         </div>
       </div>

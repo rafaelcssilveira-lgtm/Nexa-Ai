@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useLocation, useParams } from "wouter";
 import { AppLayout, useSidebarToggle } from "@/components/layout/AppLayout";
 import {
@@ -28,6 +28,45 @@ type CachedConversation = {
   updatedAt: string;
 };
 
+// Typewriter effect component
+const TypewriterText = memo(function TypewriterText({
+  text,
+  onComplete,
+}: {
+  text: string;
+  onComplete?: () => void;
+}) {
+  const [displayed, setDisplayed] = useState("");
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    if (!text) return;
+    let i = 0;
+    // Adaptive speed: aim to finish in ~2.5s, min 4ms, max 18ms per char
+    const speed = Math.max(4, Math.min(18, Math.floor(2500 / text.length)));
+    const timer = setInterval(() => {
+      i++;
+      setDisplayed(text.slice(0, i));
+      if (i >= text.length) {
+        clearInterval(timer);
+        onCompleteRef.current?.();
+      }
+    }, speed);
+    return () => clearInterval(timer);
+  }, [text]);
+
+  const done = displayed.length >= text.length;
+  return (
+    <>
+      {displayed}
+      {!done && (
+        <span className="inline-block w-[2px] h-[14px] bg-primary/60 ml-0.5 align-middle animate-pulse rounded-sm" />
+      )}
+    </>
+  );
+});
+
 export default function ChatPage() {
   const { id } = useParams();
   const convId = id ? parseInt(id, 10) : undefined;
@@ -39,17 +78,27 @@ export default function ChatPage() {
   );
 }
 
+const placeholders = [
+  "Mensagem para a Nexa...",
+  "Faça uma pergunta...",
+  "O que você quer saber?",
+  "Descreva seu problema...",
+  "Digite algo...",
+];
+
 function ChatArea({ conversationId }: { conversationId?: number }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { openSidebar } = useSidebarToggle();
 
   const [inputValue, setInputValue] = useState("");
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
   const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string } | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [typingMessageId, setTypingMessageId] = useState<number | null>(null);
+  const [placeholderIdx] = useState(() => Math.floor(Math.random() * placeholders.length));
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -67,24 +116,36 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     { query: { enabled: !!conversationId, queryKey: getListMessagesQueryKey(conversationId || 0) } }
   );
 
-  // Sync server messages → local, but NEVER while a send is in flight (prevents flash)
+  // Sync server → local only when NOT sending (avoids flash)
   useEffect(() => {
     if (isSendingRef.current) return;
     if (serverMessages) {
       setLocalMessages(serverMessages as LocalMessage[]);
+      setTypingMessageId(null);
     } else if (!conversationId) {
       setLocalMessages([]);
     }
   }, [serverMessages, conversationId]);
 
-  // Scroll to bottom whenever messages update
+  // Reset typing when conversation changes
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [localMessages, isSending]);
+    setTypingMessageId(null);
+  }, [conversationId]);
 
-  // Conversation title from cache (already fetched by sidebar)
+  const scrollToBottom = useCallback((smooth = false) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: smooth ? "smooth" : "instant",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [localMessages.length, isSending]);
+
+  // Conversation title from React Query cache
   const cachedConversations = queryClient.getQueryData<CachedConversation[]>(getListConversationsQueryKey());
   const conversationTitle = conversationId
     ? cachedConversations?.find((c) => c.id === conversationId)?.title
@@ -116,23 +177,21 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
     setInputValue("");
     setPendingImage(null);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     let currentConvId = conversationId;
 
     if (!currentConvId) {
       try {
         const newConv = await createConvMutation.mutateAsync({
-          data: { title: content.substring(0, 40) + (content.length > 40 ? "..." : "") },
+          data: { title: content.substring(0, 45) + (content.length > 45 ? "..." : "") },
         });
         currentConvId = newConv.id;
         queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
         setLocation(`/chat/${newConv.id}`, { replace: true });
       } catch (e: unknown) {
         const err = e as { error?: string };
-        toast({ title: "Erro", description: err.error || "Falha ao iniciar sessão.", variant: "destructive" });
+        toast({ title: "Erro", description: err.error || "Falha ao iniciar conversa.", variant: "destructive" });
         return;
       }
     }
@@ -140,7 +199,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     if (!currentConvId) return;
 
     const tempId = Date.now();
-    const optimisticUserMsg: LocalMessage = {
+    const optimistic: LocalMessage = {
       id: tempId,
       conversationId: currentConvId,
       role: "user",
@@ -148,7 +207,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
       imageUrl: imageDataUrl ?? null,
       createdAt: new Date().toISOString(),
     };
-    setLocalMessages((prev) => [...prev, optimisticUserMsg]);
+    setLocalMessages((prev) => [...prev, optimistic]);
 
     try {
       const response = await sendMessageMutation.mutateAsync({
@@ -156,11 +215,13 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         data: { content, imageBase64: imageBase64 ?? null },
       });
 
+      const assistantId = (response.assistantMessage as LocalMessage).id;
       setLocalMessages((prev) => [
         ...prev.filter((m) => m.id !== tempId),
         response.userMessage as LocalMessage,
         response.assistantMessage as LocalMessage,
       ]);
+      setTypingMessageId(assistantId);
 
       queryClient.setQueryData(getGetMeQueryKey(), (old: unknown) => {
         if (!old || typeof old !== "object") return old;
@@ -170,11 +231,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
       setLocalMessages((prev) => prev.filter((m) => m.id !== tempId));
       const err = e as { data?: { error?: string }; error?: string };
       const msg = err.data?.error || err.error;
-      toast({
-        title: "Falha ao enviar",
-        description: msg || "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Falha ao enviar", description: msg || "Tente novamente.", variant: "destructive" });
     }
   };
 
@@ -200,8 +257,6 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   };
 
-  const isPending = isSending;
-
   return (
     <>
       {/* Lightbox */}
@@ -211,167 +266,188 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md"
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/92 backdrop-blur-md"
             onClick={() => setLightboxSrc(null)}
           >
             <motion.img
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.18 }}
               src={lightboxSrc}
               alt="Imagem ampliada"
               className="max-w-[92vw] max-h-[88vh] rounded-2xl shadow-2xl object-contain"
               onClick={(e) => e.stopPropagation()}
             />
             <button
-              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 border border-white/15 flex items-center justify-center hover:bg-white/20 transition-colors text-white"
               onClick={() => setLightboxSrc(null)}
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex-1 flex flex-col h-full bg-background relative z-0">
+      <div className="flex-1 flex flex-col h-full bg-background">
         {/* Header */}
-        <div className="h-14 flex items-center justify-between px-4 md:px-6 border-b border-white/5 bg-background/80 backdrop-blur shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="h-14 flex items-center justify-between px-4 md:px-6 border-b border-white/[0.05] bg-background/80 backdrop-blur-md shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden h-8 w-8 text-muted-foreground hover:text-foreground"
+              className="md:hidden h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
               onClick={openSidebar}
               aria-label="Abrir menu"
             >
-              <Menu size={18} />
+              <Menu size={17} />
             </Button>
-            {conversationTitle && (
-              <span className="text-sm text-muted-foreground font-medium truncate max-w-[200px] sm:max-w-xs">
+            {conversationTitle ? (
+              <span className="text-[13px] text-muted-foreground/70 font-medium truncate">
                 {conversationTitle}
               </span>
+            ) : (
+              <span className="text-[13px] text-muted-foreground/40 font-medium">Nova conversa</span>
             )}
           </div>
           {conversationId && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              className="h-8 w-8 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 shrink-0"
               onClick={handleDelete}
               disabled={deleteConvMutation.isPending}
               data-testid="button-delete-conversation"
             >
-              <Trash2 size={15} />
+              <Trash2 size={14} />
             </Button>
           )}
         </div>
 
-        {/* Messages area */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
+        {/* Messages */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-6">
           {isLoadingMessages ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <Loader2 className="animate-spin" size={22} />
+            <div className="flex items-center justify-center h-full">
+              <div className="flex flex-col items-center gap-3 text-muted-foreground/40">
+                <Loader2 className="animate-spin" size={20} />
+                <span className="text-xs">Carregando...</span>
+              </div>
             </div>
           ) : localMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 max-w-sm mx-auto px-4">
+            <div className="flex flex-col items-center justify-center h-full text-center gap-5 max-w-sm mx-auto px-4">
               <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
+                initial={{ scale: 0.85, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.4 }}
-                className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shadow-xl shadow-primary/10"
+                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shadow-2xl shadow-primary/10"
               >
-                <MessageSquare size={28} strokeWidth={1.5} />
+                <MessageSquare size={26} strokeWidth={1.5} />
               </motion.div>
               <motion.div
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.4, delay: 0.1 }}
+                className="space-y-2"
               >
-                <h2 className="text-xl font-bold mb-2">Como posso ajudar?</h2>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Faça uma pergunta, envie um texto ou uma imagem. A Nexa está pronta para você.
+                <h2 className="text-xl font-bold">Como posso ajudar?</h2>
+                <p className="text-sm text-muted-foreground/60 leading-relaxed">
+                  Faça uma pergunta, envie um texto ou uma imagem.<br />A Nexa está pronta para você.
                 </p>
               </motion.div>
             </div>
           ) : (
-            <div className="space-y-5 max-w-3xl mx-auto">
+            <div className="space-y-4 max-w-3xl mx-auto">
               <AnimatePresence initial={false}>
                 {localMessages.map((msg, idx) => (
                   <motion.div
                     key={msg.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.22, ease: "easeOut" }}
                     className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     {msg.role === "assistant" && (
-                      <div className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0 mr-2.5 mt-1 self-start">
-                        <MessageSquare size={13} className="text-primary" strokeWidth={2} />
+                      <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mr-2.5 mt-1 self-start shadow-sm">
+                        <MessageSquare size={12} className="text-primary" strokeWidth={2} />
                       </div>
                     )}
                     <div
-                      className={`max-w-[82%] sm:max-w-[75%] ${
+                      className={`max-w-[84%] sm:max-w-[76%] ${
                         msg.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-2xl rounded-tr-sm shadow-lg shadow-primary/20"
-                          : "bg-card border border-white/[0.07] text-card-foreground rounded-2xl rounded-tl-sm shadow-lg"
+                          ? "bg-primary text-primary-foreground rounded-2xl rounded-tr-md shadow-lg shadow-primary/15"
+                          : "bg-card border border-white/[0.07] text-card-foreground rounded-2xl rounded-tl-md shadow-md"
                       } px-4 py-3`}
                       data-testid={`message-${msg.role}-${idx}`}
                     >
-                      {/* Image display */}
+                      {/* Image */}
                       {msg.imageUrl && (
                         <div className="mb-3 relative group/img">
                           <img
                             src={msg.imageUrl}
                             alt="Imagem enviada"
-                            className="rounded-xl max-h-72 max-w-full w-auto object-contain border border-white/10 cursor-zoom-in"
+                            className="rounded-xl max-h-64 max-w-full w-auto object-contain border border-white/10 cursor-zoom-in transition-opacity hover:opacity-90"
                             onClick={() => setLightboxSrc(msg.imageUrl!)}
                           />
                           <button
                             onClick={() => setLightboxSrc(msg.imageUrl!)}
                             className="absolute bottom-2 right-2 w-7 h-7 rounded-lg bg-black/60 border border-white/20 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
                           >
-                            <ZoomIn size={13} className="text-white" />
+                            <ZoomIn size={12} className="text-white" />
                           </button>
                         </div>
                       )}
+
+                      {/* Nexa label */}
                       {msg.role === "assistant" && (
-                        <div className="text-[10px] font-semibold text-primary/60 tracking-widest uppercase mb-1">
+                        <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-1.5">
                           Nexa
                         </div>
                       )}
-                      <div className="text-[13px] leading-relaxed whitespace-pre-wrap">{msg.content || "..."}</div>
+
+                      {/* Content */}
+                      <div className="text-[13px] leading-[1.65] whitespace-pre-wrap">
+                        {msg.role === "assistant" && typingMessageId === msg.id ? (
+                          <TypewriterText
+                            text={msg.content || ""}
+                            onComplete={() => {
+                              setTypingMessageId(null);
+                              scrollToBottom(true);
+                            }}
+                          />
+                        ) : (
+                          msg.content || "..."
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 ))}
 
-                {isPending && (
+                {/* Thinking indicator */}
+                {isSending && (
                   <motion.div
                     key="thinking"
-                    initial={{ opacity: 0, y: 12 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
                     className="flex justify-start"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0 mr-2.5 mt-1 self-start">
-                      <MessageSquare size={13} className="text-primary" strokeWidth={2} />
+                    <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mr-2.5 mt-1 self-start shadow-sm">
+                      <MessageSquare size={12} className="text-primary" strokeWidth={2} />
                     </div>
-                    <div className="bg-card border border-white/[0.07] rounded-2xl rounded-tl-sm px-4 py-3 shadow-lg">
-                      <div className="text-[10px] font-semibold text-primary/60 tracking-widest uppercase mb-2">
+                    <div className="bg-card border border-white/[0.07] rounded-2xl rounded-tl-md px-4 py-3 shadow-md">
+                      <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-2">
                         Nexa
                       </div>
-                      <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                        <span>Pensando</span>
-                        <span className="flex gap-0.5 mt-0.5">
-                          {[0, 1, 2].map((i) => (
-                            <span
-                              key={i}
-                              className="w-1 h-1 rounded-full bg-primary/60 animate-bounce"
-                              style={{ animationDelay: `${i * 180}ms` }}
-                            />
-                          ))}
-                        </span>
+                      <div className="flex items-center gap-1.5">
+                        {[0, 1, 2].map((i) => (
+                          <span
+                            key={i}
+                            className="w-1.5 h-1.5 rounded-full bg-primary/50 animate-bounce"
+                            style={{ animationDelay: `${i * 150}ms`, animationDuration: "0.9s" }}
+                          />
+                        ))}
                       </div>
                     </div>
                   </motion.div>
@@ -382,11 +458,14 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         </div>
 
         {/* Input area */}
-        <div className="px-3 md:px-6 py-3 md:py-4 bg-background shrink-0">
+        <div className="px-3 sm:px-5 md:px-8 py-3 md:py-4 bg-background shrink-0">
           <div className="max-w-3xl mx-auto">
             <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 to-blue-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500 pointer-events-none" />
-              <div className="relative bg-card border border-white/10 rounded-2xl shadow-2xl focus-within:border-primary/40 transition-colors">
+              {/* Glow border */}
+              <div className="absolute -inset-px bg-gradient-to-r from-primary/20 via-violet-500/15 to-blue-500/20 rounded-[18px] blur-sm opacity-0 group-focus-within:opacity-100 transition-opacity duration-400 pointer-events-none" />
+
+              <div className="relative bg-card border border-white/[0.09] rounded-[17px] shadow-xl focus-within:border-primary/30 transition-colors duration-200">
+                {/* Image preview */}
                 {pendingImage && (
                   <div className="px-3 pt-3">
                     <div className="relative inline-block">
@@ -398,7 +477,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                       <button
                         type="button"
                         onClick={() => setPendingImage(null)}
-                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-background border border-white/20 flex items-center justify-center hover:bg-destructive/20 transition-colors"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-background border border-white/20 flex items-center justify-center hover:bg-destructive/20 transition-colors"
                       >
                         <X size={10} />
                       </button>
@@ -418,12 +497,12 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground hover:bg-white/5 rounded-xl"
+                    className="h-9 w-9 shrink-0 text-muted-foreground/50 hover:text-foreground hover:bg-white/[0.05] rounded-xl"
                     onClick={() => imageInputRef.current?.click()}
-                    disabled={isPending}
+                    disabled={isSending}
                     title="Enviar imagem"
                   >
-                    <ImageIcon size={17} />
+                    <ImageIcon size={16} />
                   </Button>
 
                   <textarea
@@ -434,28 +513,32 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                       autoResize(e.target);
                     }}
                     onKeyDown={handleKeyDown}
-                    placeholder={pendingImage ? "Pergunte sobre a imagem..." : "Mensagem para a Nexa..."}
-                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none min-h-[40px] max-h-40"
+                    placeholder={pendingImage ? "Pergunte sobre a imagem..." : placeholders[placeholderIdx]}
+                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/35 outline-none min-h-[40px] max-h-40 leading-relaxed"
                     rows={1}
                     data-testid="input-chat"
-                    disabled={isPending}
+                    disabled={isSending}
                     style={{ fieldSizing: "content" } as React.CSSProperties}
                   />
 
                   <Button
                     size="icon"
-                    className="h-9 w-9 shrink-0 rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/25"
+                    className="h-9 w-9 shrink-0 rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-all active:scale-95"
                     onClick={handleSend}
-                    disabled={(!inputValue.trim() && !pendingImage) || isPending}
+                    disabled={(!inputValue.trim() && !pendingImage) || isSending}
                     data-testid="button-send-chat"
                   >
-                    {isPending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+                    {isSending ? (
+                      <Loader2 className="animate-spin" size={15} />
+                    ) : (
+                      <Send size={15} />
+                    )}
                   </Button>
                 </div>
               </div>
             </div>
 
-            <p className="text-center mt-2 text-[10px] text-muted-foreground/30">
+            <p className="text-center mt-2 text-[10px] text-muted-foreground/25">
               A Nexa pode cometer erros. Verifique informações importantes.
             </p>
           </div>
