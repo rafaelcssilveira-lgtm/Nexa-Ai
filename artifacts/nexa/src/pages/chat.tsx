@@ -180,7 +180,6 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
   };
 
   const isPending = createConvMutation.isPending || sendMessageMutation.isPending;
-  const isAtLimit = user?.plan === "free" && (user?.dailyMessagesUsed ?? 0) >= (user?.dailyLimit ?? 10);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background relative z-0">
@@ -277,7 +276,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                         Nexa
                       </div>
                     )}
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content || "..."}</div>
                   </div>
                 </motion.div>
               ))}
@@ -319,12 +318,6 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
       <div className="px-3 md:px-6 py-3 md:py-4 bg-background shrink-0">
         <div className="max-w-3xl mx-auto">
-          {isAtLimit && (
-            <div className="mb-2 text-center text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg py-2 px-3">
-              Limite diário atingido. Faça upgrade para PRO para continuar.
-            </div>
-          )}
-
           <div className="relative group">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 to-blue-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500 pointer-events-none" />
             <div className="relative bg-card border border-white/10 rounded-2xl shadow-2xl focus-within:border-primary/40 transition-colors">
@@ -361,7 +354,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                   size="icon"
                   className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground hover:bg-white/5 rounded-xl"
                   onClick={() => imageInputRef.current?.click()}
-                  disabled={isPending || isAtLimit}
+                  disabled={isPending}
                   title="Enviar imagem"
                 >
                   <ImageIcon size={17} />
@@ -379,7 +372,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                   className="flex-1 bg-transparent border-0 focus:ring-0 resize-none px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none min-h-[40px] max-h-40"
                   rows={1}
                   data-testid="input-chat"
-                  disabled={isPending || isAtLimit}
+                  disabled={isPending}
                   style={{ fieldSizing: "content" } as React.CSSProperties}
                 />
 
@@ -387,7 +380,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                   size="icon"
                   className="h-9 w-9 shrink-0 rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/25"
                   onClick={handleSend}
-                  disabled={(!inputValue.trim() && !pendingImage) || isPending || isAtLimit}
+                  disabled={(!inputValue.trim() && !pendingImage) || isPending}
                   data-testid="button-send-chat"
                 >
                   {isPending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}

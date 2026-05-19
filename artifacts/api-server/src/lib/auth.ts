@@ -8,7 +8,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
-export const FREE_DAILY_LIMIT = 10;
+export const FREE_DAILY_LIMIT = 47;
 export const PRO_DAILY_LIMIT = 9999;
 
 export function getDailyLimit(plan: string): number {

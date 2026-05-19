@@ -1,6 +1,13 @@
 import { logger } from "./logger";
 import { openai } from "@workspace/integrations-openai-ai-server";
 
+const NEXA_PERSONA = `Você é a Nexa, uma assistente de IA avançada, inteligente e prestativa. Responda de forma clara, útil e precisa. Quando o usuário enviar uma imagem, analise-a com atenção e descreva detalhadamente o que vê: objetos, pessoas, textos, cores, contexto, emoções, e quaisquer outros detalhes relevantes. Se for solicitado resolver algo com base na imagem (como ler texto, identificar produtos, resolver um problema), faça isso. Adapte seu tom à conversa. Nunca mencione que você é baseada em algum modelo específico de IA. Responda sempre no mesmo idioma do usuário (preferencialmente português do Brasil).`;
+
+interface AiMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 type ContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string; detail: "auto" } };
@@ -10,11 +17,14 @@ type OaiMessage =
   | { role: "user"; content: string | ContentPart[] }
   | { role: "assistant"; content: string };
 
-const NEXA_PERSONA = `Você é a Nexa, uma assistente de IA avançada e inteligente. Você é prestativa, concisa e precisa. Quando o usuário enviar uma imagem, descreva e analise-a com detalhes — cores, objetos, pessoas, texto visível, contexto, etc. Adapte seu tom à conversa: técnico quando necessário, amigável quando apropriado. Nunca mencione que você é baseada em algum modelo específico de IA. Responda sempre no mesmo idioma do usuário.`;
+const FALLBACK_RESPONSES = [
+  "Desculpe, tive um problema ao processar sua mensagem. Pode tentar novamente?",
+  "Ocorreu um erro temporário. Por favor, tente enviar sua mensagem novamente.",
+  "Não consegui gerar uma resposta agora. Tente novamente em instantes.",
+];
 
-interface AiMessage {
-  role: "user" | "assistant";
-  content: string;
+function getFallback(): string {
+  return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)] ?? FALLBACK_RESPONSES[0]!;
 }
 
 export async function generateAiResponse(
@@ -31,11 +41,15 @@ export async function generateAiResponse(
 
     for (let i = 0; i < messages.length; i++) {
       const m = messages[i]!;
-      const isLastUser = i === messages.length - 1 && m.role === "user" && !!imageBase64;
+      const isLastUserWithImage =
+        i === messages.length - 1 && m.role === "user" && !!imageBase64;
 
-      if (isLastUser) {
-        const content: ContentPart[] = [
-          { type: "text", text: m.content || "O que há nessa imagem?" },
+      if (isLastUserWithImage) {
+        const parts: ContentPart[] = [
+          {
+            type: "text",
+            text: m.content?.trim() || "Analise essa imagem e descreva o que você vê com detalhes.",
+          },
           {
             type: "image_url",
             image_url: {
@@ -44,7 +58,7 @@ export async function generateAiResponse(
             },
           },
         ];
-        openAiMessages.push({ role: "user", content });
+        openAiMessages.push({ role: "user", content: parts });
       } else if (m.role === "user") {
         openAiMessages.push({ role: "user", content: m.content });
       } else {
@@ -52,43 +66,22 @@ export async function generateAiResponse(
       }
     }
 
-    const response = await openai.chat.completions.create({
+    const completion = await openai.chat.completions.create({
       model,
       messages: openAiMessages,
-      max_completion_tokens: isPro ? 2000 : 800,
+      max_completion_tokens: isPro ? 2048 : 1024,
     });
 
-    return (
-      response.choices[0]?.message?.content ??
-      "Não consegui gerar uma resposta. Por favor, tente novamente."
-    );
+    const raw = completion.choices[0]?.message?.content;
+
+    if (!raw || raw.trim() === "") {
+      logger.warn({ model, messageCount: messages.length }, "Empty AI response");
+      return getFallback();
+    }
+
+    return raw.trim();
   } catch (err) {
     logger.error({ err }, "Error calling AI API");
-    return generateFallbackResponse(messages, isPro, !!imageBase64);
+    return getFallback();
   }
-}
-
-function generateFallbackResponse(
-  messages: AiMessage[],
-  isPro: boolean,
-  hasImage: boolean
-): string {
-  if (hasImage) {
-    return `Recebi sua imagem! Porém estou com um problema temporário no serviço de visão. Tente novamente em instantes.`;
-  }
-
-  const lastMessage = messages[messages.length - 1]?.content ?? "";
-  const lowerMsg = lastMessage.toLowerCase();
-
-  if (lowerMsg.includes("oi") || lowerMsg.includes("olá") || lowerMsg.includes("hello")) {
-    return `Olá! Sou a Nexa${isPro ? " PRO" : ""}, sua assistente de IA. Como posso ajudar?`;
-  }
-
-  const responses = [
-    "Entendido! Estou processando sua mensagem. Como posso ajudar melhor?",
-    "Interessante! Pode me dar mais detalhes para eu te ajudar da melhor forma?",
-    "Certo! Vou fazer o possível para te ajudar. O que mais você precisa?",
-  ];
-
-  return responses[Math.floor(Math.random() * responses.length)] ?? responses[0]!;
 }
