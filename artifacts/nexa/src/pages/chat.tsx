@@ -97,6 +97,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
   const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string } | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [typingMessageId, setTypingMessageId] = useState<number | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [placeholderIdx] = useState(() => Math.floor(Math.random() * placeholders.length));
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -107,7 +108,8 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
   const sendMessageMutation = useSendMessage();
   const deleteConvMutation = useDeleteConversation();
 
-  const isSending = createConvMutation.isPending || sendMessageMutation.isPending;
+  // isSending covers the mutation states; isProcessing covers the full flow including gaps between mutations
+  const isSending = isProcessing || createConvMutation.isPending || sendMessageMutation.isPending;
   const isSendingRef = useRef(isSending);
   isSendingRef.current = isSending;
 
@@ -179,37 +181,39 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     setPendingImage(null);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    let currentConvId = conversationId;
+    // Mark the whole operation as in-progress so the thinking indicator
+    // stays visible even between the two sequential mutations
+    setIsProcessing(true);
 
-    if (!currentConvId) {
-      try {
+    let currentConvId = conversationId;
+    // Declare tempId here so catch can reference it to remove optimistic msg
+    let tempId = -1;
+
+    try {
+      if (!currentConvId) {
         const newConv = await createConvMutation.mutateAsync({
           data: { title: content.substring(0, 45) + (content.length > 45 ? "..." : "") },
         });
         currentConvId = newConv.id;
         queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+        // Navigate now — with the merged optional-param route in App.tsx this
+        // keeps the same component mounted; state and localMessages are preserved
         setLocation(`/chat/${newConv.id}`, { replace: true });
-      } catch (e: unknown) {
-        const err = e as { error?: string };
-        toast({ title: "Erro", description: err.error || "Falha ao iniciar conversa.", variant: "destructive" });
-        return;
       }
-    }
 
-    if (!currentConvId) return;
+      if (!currentConvId) return;
 
-    const tempId = Date.now();
-    const optimistic: LocalMessage = {
-      id: tempId,
-      conversationId: currentConvId,
-      role: "user",
-      content,
-      imageUrl: imageDataUrl ?? null,
-      createdAt: new Date().toISOString(),
-    };
-    setLocalMessages((prev) => [...prev, optimistic]);
+      tempId = Date.now();
+      const optimistic: LocalMessage = {
+        id: tempId,
+        conversationId: currentConvId,
+        role: "user",
+        content,
+        imageUrl: imageDataUrl ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      setLocalMessages((prev) => [...prev, optimistic]);
 
-    try {
       const response = await sendMessageMutation.mutateAsync({
         id: currentConvId,
         data: { content, imageBase64: imageBase64 ?? null },
@@ -228,10 +232,19 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         return { ...(old as object), dailyMessagesUsed: response.dailyMessagesUsed };
       });
     } catch (e: unknown) {
-      setLocalMessages((prev) => prev.filter((m) => m.id !== tempId));
+      // Remove the optimistic message on failure
+      if (tempId !== -1) {
+        setLocalMessages((prev) => prev.filter((m) => m.id !== tempId));
+      }
       const err = e as { data?: { error?: string }; error?: string };
       const msg = err.data?.error || err.error;
-      toast({ title: "Falha ao enviar", description: msg || "Tente novamente.", variant: "destructive" });
+      toast({
+        title: "Falha ao enviar",
+        description: msg || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -327,7 +340,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-6">
-          {isLoadingMessages ? (
+          {isLoadingMessages && localMessages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-3 text-muted-foreground/40">
                 <Loader2 className="animate-spin" size={20} />

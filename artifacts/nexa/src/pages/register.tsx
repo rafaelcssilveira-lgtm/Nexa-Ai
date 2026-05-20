@@ -22,7 +22,7 @@ const registerSchema = z.object({
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 const perks = [
-  "10 mensagens por dia no plano grátis",
+  "54 mensagens por dia no plano grátis",
   "Análise de imagens com IA",
   "Histórico de conversas salvo",
   "Upgrade para ilimitado a qualquer hora",

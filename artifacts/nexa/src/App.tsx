@@ -38,10 +38,7 @@ function Router() {
       <Route path="/" component={LandingPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
-      <Route path="/chat">
-        {(params) => <ProtectedRoute component={ChatPage} params={params} />}
-      </Route>
-      <Route path="/chat/:id">
+      <Route path="/chat/:id?">
         {(params) => <ProtectedRoute component={ChatPage} params={params} />}
       </Route>
       <Route path="/plans">
