@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from "react";
-import { flushSync } from "react-dom";
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useLocation, useParams } from "wouter";
 import { AppLayout, useSidebarToggle } from "@/components/layout/AppLayout";
 import {
@@ -119,26 +118,27 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     { query: { enabled: !!conversationId, queryKey: getListMessagesQueryKey(conversationId || 0) } }
   );
 
-  // Effect 1: When the user navigates to a different conversation, clear local
-  // messages immediately (so we don't flash old messages) — but ONLY if we are
-  // not mid-send (which also changes conversationId via setLocation).
+  // When the user navigates to a different conversation (not during a send),
+  // clear local optimistic messages and stop any typewriter animation.
   useEffect(() => {
-    if (isSendingRef.current) return;
-    setLocalMessages([]);
-    setTypingMessageId(null);
-  }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Effect 2: Sync real server messages into local state.
-  // IMPORTANT: only run when there are actual messages (length > 0).
-  // An empty array [] is falsy-equivalent here — returning [] from the
-  // server for a brand-new conversation must NOT wipe the optimistic message.
-  useEffect(() => {
-    if (isSendingRef.current) return;
-    if (serverMessages && serverMessages.length > 0) {
-      setLocalMessages(serverMessages as LocalMessage[]);
+    if (!isSendingRef.current) {
+      setLocalMessages([]);
       setTypingMessageId(null);
     }
-  }, [serverMessages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Merged display: prefer server data when available, append any local-only
+  // optimistic messages (those whose IDs are not yet in the server response).
+  const displayMessages = useMemo((): LocalMessage[] => {
+    if (serverMessages && serverMessages.length > 0) {
+      const serverIds = new Set(serverMessages.map((m) => m.id));
+      const localOnly = localMessages.filter((m) => !serverIds.has(m.id));
+      if (localOnly.length === 0) return serverMessages as LocalMessage[];
+      return [...(serverMessages as LocalMessage[]), ...localOnly];
+    }
+    // No server data yet (new conv or loading) — show local optimistic messages
+    return localMessages;
+  }, [serverMessages, localMessages]);
 
   const scrollToBottom = useCallback((smooth = false) => {
     if (scrollRef.current) {
@@ -151,7 +151,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [localMessages.length, isSending]);
+  }, [displayMessages.length, isSending]);
 
   // Conversation title from React Query cache
   const cachedConversations = queryClient.getQueryData<CachedConversation[]>(getListConversationsQueryKey());
@@ -187,12 +187,10 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     setPendingImage(null);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    // Mark the whole operation as in-progress so the thinking indicator
-    // stays visible even between the two sequential mutations
     setIsProcessing(true);
 
     let currentConvId = conversationId;
-    // Declared here so the catch block can remove the optimistic message on error
+    const isNewConversation = !conversationId;
     let tempId = -1;
 
     try {
@@ -202,18 +200,13 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         });
         currentConvId = newConv.id;
         queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-        // NOTE: do NOT call setLocation yet — we add the optimistic message first
-        // so that when the URL changes and the component re-renders, localMessages
-        // is already non-empty and the loading spinner (black screen) is suppressed.
       }
 
       if (!currentConvId) return;
 
-      // ✅ Add optimistic message using flushSync so React commits the DOM update
-      // BEFORE setLocation fires. Wouter uses the browser History API directly
-      // (outside React's batch), so without flushSync the component would
-      // re-render with the new conversationId but localMessages still empty →
-      // isLoadingMessages && localMessages.length === 0 → black screen.
+      // Add optimistic message to local state immediately — visible while waiting
+      // for the AI response. For new conversations we do NOT navigate yet, so
+      // useListMessages stays disabled and cannot wipe the optimistic message.
       tempId = Date.now();
       const optimistic: LocalMessage = {
         id: tempId,
@@ -223,14 +216,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         imageUrl: imageDataUrl ?? null,
         createdAt: new Date().toISOString(),
       };
-      flushSync(() => {
-        setLocalMessages((prev) => [...prev, optimistic]);
-      });
-
-      // ✅ Navigate only AFTER the DOM has the optimistic message committed
-      if (!conversationId) {
-        setLocation(`/chat/${currentConvId}`, { replace: true });
-      }
+      setLocalMessages((prev) => [...prev, optimistic]);
 
       const response = await sendMessageMutation.mutateAsync({
         id: currentConvId,
@@ -238,6 +224,8 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
       });
 
       const assistantId = (response.assistantMessage as LocalMessage).id;
+
+      // Replace optimistic message with real server messages
       setLocalMessages((prev) => [
         ...prev.filter((m) => m.id !== tempId),
         response.userMessage as LocalMessage,
@@ -249,11 +237,23 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         if (!old || typeof old !== "object") return old;
         return { ...(old as object), dailyMessagesUsed: response.dailyMessagesUsed };
       });
+
+      // For new conversations: pre-populate the React Query cache with the real
+      // messages BEFORE navigating. When useListMessages(id) enables after the URL
+      // change it will find the cached data instantly — no loading state, no empty
+      // array that could flash the "Como posso ajudar?" screen.
+      if (isNewConversation) {
+        queryClient.setQueryData(
+          getListMessagesQueryKey(currentConvId),
+          [response.userMessage, response.assistantMessage],
+        );
+        setLocation(`/chat/${currentConvId}`, { replace: true });
+      }
     } catch (e: unknown) {
-      // Keep the optimistic message visible so the screen doesn't go blank.
-      // Removing it from a new conversation (where it was the only message)
-      // would cause localMessages=[] and show the empty state ("outra tela").
-      // The user can retry by sending again.
+      // Remove the optimistic message on error so we don't show a stale bubble
+      if (tempId !== -1) {
+        setLocalMessages((prev) => prev.filter((m) => m.id !== tempId));
+      }
       const err = e as { data?: { error?: string }; error?: string };
       const msg = err.data?.error || err.error;
       toast({
@@ -358,14 +358,14 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-6">
-          {isLoadingMessages && localMessages.length === 0 ? (
+          {isLoadingMessages && displayMessages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-3 text-muted-foreground/40">
                 <Loader2 className="animate-spin" size={20} />
                 <span className="text-xs">Carregando...</span>
               </div>
             </div>
-          ) : localMessages.length === 0 ? (
+          ) : displayMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center gap-5 max-w-sm mx-auto px-4">
               <motion.div
                 initial={{ scale: 0.85, opacity: 0 }}
@@ -390,7 +390,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
           ) : (
             <div className="space-y-4 max-w-3xl mx-auto">
               <AnimatePresence initial={false}>
-                {localMessages.map((msg, idx) => (
+                {displayMessages.map((msg, idx) => (
                   <motion.div
                     key={msg.id}
                     initial={{ opacity: 0, y: 10, scale: 0.98 }}
