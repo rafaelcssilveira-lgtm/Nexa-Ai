@@ -537,56 +537,52 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
               </motion.div>
             </div>
           ) : (
-            <div className="space-y-5 max-w-3xl mx-auto pb-2">
+            <div className="max-w-3xl mx-auto pb-4 space-y-1">
               <AnimatePresence initial={false}>
                 {displayMessages.map((msg, idx) => (
                   <motion.div
                     key={msg.id}
-                    initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} gap-2.5`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className={`group/msg ${msg.role === "user" ? "flex justify-end py-1" : "flex items-start gap-3 py-3"}`}
                   >
+                    {/* Avatar — só para mensagens da IA */}
                     {msg.role === "assistant" && (
-                      <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 self-start shadow-sm">
-                        <MessageSquare size={12} className="text-primary" strokeWidth={2} />
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+                        <MessageSquare size={11} className="text-primary" strokeWidth={2.5} />
                       </div>
                     )}
+
+                    {/* Conteúdo */}
                     <div
-                      className={`min-w-0 ${
-                        msg.role === "user"
-                          ? "max-w-[82%] sm:max-w-[74%] bg-primary text-primary-foreground rounded-2xl rounded-tr-md shadow-lg shadow-primary/15 px-4 py-3"
-                          : "max-w-[88%] sm:max-w-[82%] bg-card border border-white/[0.07] text-card-foreground rounded-2xl rounded-tl-md shadow-md px-4 py-3.5"
-                      }`}
+                      className={msg.role === "user"
+                        ? "max-w-[80%] sm:max-w-[72%] bg-white/[0.07] text-foreground/90 rounded-2xl rounded-br-sm px-4 py-2.5 text-[13.5px] leading-relaxed"
+                        : "flex-1 min-w-0 text-foreground/90"
+                      }
                       data-testid={`message-${msg.role}-${idx}`}
                     >
-                      {/* Image */}
+                      {/* Imagem */}
                       {msg.imageUrl && (
-                        <div className="mb-3 relative group/img">
+                        <div className={`relative group/img ${msg.role === "user" ? "mb-2" : "mb-3"}`}>
                           <img
                             src={msg.imageUrl}
                             alt="Imagem enviada"
-                            className="rounded-xl max-h-64 max-w-full w-auto object-contain border border-white/10 cursor-zoom-in transition-opacity hover:opacity-90"
+                            className="rounded-xl max-h-60 max-w-full w-auto object-contain cursor-zoom-in opacity-90 hover:opacity-100 transition-opacity"
                             onClick={() => setLightboxSrc(msg.imageUrl!)}
                           />
                           <button
                             onClick={() => setLightboxSrc(msg.imageUrl!)}
-                            className="absolute bottom-2 right-2 w-7 h-7 rounded-lg bg-black/60 border border-white/20 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                            className="absolute bottom-2 right-2 w-6 h-6 rounded-md bg-black/50 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
                           >
-                            <ZoomIn size={12} className="text-white" />
+                            <ZoomIn size={11} className="text-white" />
                           </button>
                         </div>
                       )}
 
-                      {msg.role === "assistant" && (
-                        <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-2">
-                          Nexa
-                        </div>
-                      )}
-
-                      {/* Content */}
+                      {/* Texto da IA */}
                       {msg.role === "assistant" ? (
-                        <div className="text-[13px] leading-[1.7] prose-invert">
+                        <div className="text-[13.5px] leading-[1.75]">
                           {typingMessageId === msg.id ? (
                             <TypewriterMarkdown
                               text={msg.content || ""}
@@ -600,40 +596,33 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                           )}
                         </div>
                       ) : (
-                        <div className="text-[13px] leading-[1.65] whitespace-pre-wrap">
-                          {msg.content || "..."}
-                        </div>
+                        <span className="whitespace-pre-wrap">{msg.content || "..."}</span>
                       )}
                     </div>
                   </motion.div>
                 ))}
 
-                {/* Thinking indicator */}
+                {/* Indicador de pensamento */}
                 {isSending && (
                   <motion.div
                     key="thinking"
-                    initial={{ opacity: 0, y: 8 }}
+                    initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex justify-start gap-2.5"
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex items-center gap-3 py-3"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 self-start shadow-sm">
-                      <MessageSquare size={12} className="text-primary" strokeWidth={2} />
+                    <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
+                      <MessageSquare size={11} className="text-primary" strokeWidth={2.5} />
                     </div>
-                    <div className="bg-card border border-white/[0.07] rounded-2xl rounded-tl-md px-4 py-3.5 shadow-md">
-                      <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-2.5">
-                        Nexa
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {[0, 1, 2].map((i) => (
-                          <span
-                            key={i}
-                            className="w-1.5 h-1.5 rounded-full bg-primary/50 animate-bounce"
-                            style={{ animationDelay: `${i * 150}ms`, animationDuration: "0.9s" }}
-                          />
-                        ))}
-                      </div>
+                    <div className="flex items-center gap-1">
+                      {[0, 1, 2].map((i) => (
+                        <span
+                          key={i}
+                          className="w-[5px] h-[5px] rounded-full bg-primary/40 animate-bounce"
+                          style={{ animationDelay: `${i * 140}ms`, animationDuration: "0.8s" }}
+                        />
+                      ))}
                     </div>
                   </motion.div>
                 )}
