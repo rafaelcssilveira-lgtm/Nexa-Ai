@@ -17,7 +17,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarContext.Provider value={{ openSidebar: () => setMobileOpen(true) }}>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
+      <div className="flex w-full overflow-hidden bg-background" style={{ height: "100dvh" }}>
         <div className="hidden md:flex flex-col w-64 border-r border-white/[0.05] bg-sidebar h-full z-10 shrink-0">
           <SidebarContent onClose={() => {}} />
         </div>

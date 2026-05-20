@@ -13,10 +13,12 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Send, Loader2, Trash2, Menu, ImageIcon, X, ZoomIn } from "lucide-react";
+import { MessageSquare, Send, Loader2, Trash2, Menu, ImageIcon, X, ZoomIn, Copy, Check as CheckIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Message } from "@workspace/api-client-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type LocalMessage = Message & { imageUrl?: string | null };
 
@@ -28,8 +30,112 @@ type CachedConversation = {
   updatedAt: string;
 };
 
-// Typewriter effect component
-const TypewriterText = memo(function TypewriterText({
+// ─── Markdown renderer ────────────────────────────────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      onClick={copy}
+      className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.1] text-[10px] text-muted-foreground/70 hover:text-foreground transition-all"
+    >
+      {copied ? <CheckIcon size={10} /> : <Copy size={10} />}
+      {copied ? "Copiado" : "Copiar"}
+    </button>
+  );
+}
+
+const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
+        h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-semibold mb-1.5 mt-3 first:mt-0 text-foreground/90">{children}</h3>,
+        ul: ({ children }) => <ul className="mb-3 space-y-1.5 list-none pl-0">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-3 space-y-1.5 list-decimal pl-5">{children}</ol>,
+        li: ({ children }) => (
+          <li className="flex gap-2 text-sm leading-relaxed">
+            <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-primary/50 shrink-0" />
+            <span>{children}</span>
+          </li>
+        ),
+        code: ({ className, children, ...props }) => {
+          const isBlock = className?.includes("language-");
+          const codeText = String(children).replace(/\n$/, "");
+          if (isBlock) {
+            const lang = className?.replace("language-", "") ?? "";
+            return (
+              <div className="relative my-3 rounded-xl overflow-hidden border border-white/[0.08] bg-[#0d0d10]">
+                {lang && (
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.07] bg-white/[0.03]">
+                    <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">{lang}</span>
+                    <CopyButton text={codeText} />
+                  </div>
+                )}
+                {!lang && <CopyButton text={codeText} />}
+                <pre className="overflow-x-auto px-4 py-3.5 text-[12.5px] leading-relaxed font-mono text-foreground/85">
+                  <code>{codeText}</code>
+                </pre>
+              </div>
+            );
+          }
+          return (
+            <code
+              className="px-1.5 py-0.5 rounded-md bg-white/[0.08] border border-white/[0.08] text-[12px] font-mono text-primary/90"
+              {...props}
+            >
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => <>{children}</>,
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-primary/40 pl-3 my-3 text-muted-foreground/80 italic">{children}</blockquote>
+        ),
+        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+        em: ({ children }) => <em className="italic text-foreground/90">{children}</em>,
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+          >
+            {children}
+          </a>
+        ),
+        hr: () => <hr className="my-4 border-white/[0.08]" />,
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-3">
+            <table className="w-full text-sm border-collapse">{children}</table>
+          </div>
+        ),
+        th: ({ children }) => (
+          <th className="text-left px-3 py-2 border border-white/[0.08] bg-white/[0.04] font-semibold text-foreground/90 text-xs uppercase tracking-wide">
+            {children}
+          </th>
+        ),
+        td: ({ children }) => (
+          <td className="px-3 py-2 border border-white/[0.06] text-foreground/80">{children}</td>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+});
+
+// ─── TypewriterMarkdown ───────────────────────────────────────────────────────
+
+const TypewriterMarkdown = memo(function TypewriterMarkdown({
   text,
   onComplete,
 }: {
@@ -37,35 +143,39 @@ const TypewriterText = memo(function TypewriterText({
   onComplete?: () => void;
 }) {
   const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
     if (!text) return;
     let i = 0;
-    // Adaptive speed: aim to finish in ~2.5s, min 4ms, max 18ms per char
-    const speed = Math.max(4, Math.min(18, Math.floor(2500 / text.length)));
+    const speed = Math.max(3, Math.min(14, Math.floor(2200 / text.length)));
     const timer = setInterval(() => {
       i++;
       setDisplayed(text.slice(0, i));
       if (i >= text.length) {
         clearInterval(timer);
+        setDone(true);
         onCompleteRef.current?.();
       }
     }, speed);
     return () => clearInterval(timer);
   }, [text]);
 
-  const done = displayed.length >= text.length;
+  if (done) {
+    return <MarkdownContent content={text} />;
+  }
+
   return (
-    <>
+    <span className="whitespace-pre-wrap text-[13px] leading-[1.7]">
       {displayed}
-      {!done && (
-        <span className="inline-block w-[2px] h-[14px] bg-primary/60 ml-0.5 align-middle animate-pulse rounded-sm" />
-      )}
-    </>
+      <span className="inline-block w-[2px] h-[14px] bg-primary/60 ml-0.5 align-middle animate-pulse rounded-sm" />
+    </span>
   );
 });
+
+// ─── ChatPage ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
   const { id } = useParams();
@@ -83,11 +193,14 @@ const placeholders = [
   "Faça uma pergunta...",
   "O que você quer saber?",
   "Descreva seu problema...",
-  "Digite algo...",
+  "Como posso ajudar você hoje?",
 ];
+
+// ─── ChatArea ─────────────────────────────────────────────────────────────────
 
 function ChatArea({ conversationId }: { conversationId?: number }) {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { openSidebar } = useSidebarToggle();
@@ -98,21 +211,25 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [typingMessageId, setTypingMessageId] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  // After handleSend completes, set this to navigate to the new conversation.
+  // The useEffect below waits for isSending=false to guarantee all state is
+  // settled before changing the URL — this eliminates the race condition that
+  // caused the blank screen.
+  const [pendingNavId, setPendingNavId] = useState<number | null>(null);
   const [placeholderIdx] = useState(() => Math.floor(Math.random() * placeholders.length));
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Set to true immediately before calling setLocation inside handleSend so that
-  // Effect 1 knows the conversationId change was caused by a send (not by the
-  // user clicking a conversation) and skips clearing localMessages.
+  // Set to true immediately before setLocation inside the pendingNavId effect
+  // so that Effect 1 knows this conversationId change came from a send — not
+  // from the user clicking a different conversation — and skips clearing messages.
   const navigatingAfterSendRef = useRef(false);
 
   const createConvMutation = useCreateConversation();
   const sendMessageMutation = useSendMessage();
   const deleteConvMutation = useDeleteConversation();
 
-  // isSending covers the mutation states; isProcessing covers the full flow including gaps between mutations
   const isSending = isProcessing || createConvMutation.isPending || sendMessageMutation.isPending;
   const isSendingRef = useRef(isSending);
   isSendingRef.current = isSending;
@@ -122,9 +239,8 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     { query: { enabled: !!conversationId, queryKey: getListMessagesQueryKey(conversationId || 0) } }
   );
 
-  // When conversationId changes, clear local optimistic messages — UNLESS the
-  // change was triggered by a send operation (navigatingAfterSendRef), in which
-  // case localMessages must be preserved so messages don't flash away.
+  // Effect 1: clear local optimistic messages when the user navigates to a
+  // different conversation. Skip when the change was caused by a send.
   useEffect(() => {
     if (navigatingAfterSendRef.current) {
       navigatingAfterSendRef.current = false;
@@ -134,8 +250,18 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     setTypingMessageId(null);
   }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Merged display: prefer server data when available, append any local-only
-  // optimistic messages (those whose IDs are not yet in the server response).
+  // Effect 2: navigate to a new conversation AFTER all state has settled.
+  // pendingNavId is set inside handleSend; isSending drops to false in finally.
+  // Both are batched → this effect fires with isSending=false already set.
+  useEffect(() => {
+    if (pendingNavId === null || isSending) return;
+    navigatingAfterSendRef.current = true;
+    setLocation(`/chat/${pendingNavId}`, { replace: true });
+    setPendingNavId(null);
+  }, [pendingNavId, isSending, setLocation]);
+
+  // Merged display: prefer server data when available, append local-only
+  // optimistic messages (IDs not yet in the server response).
   const displayMessages = useMemo((): LocalMessage[] => {
     if (serverMessages && serverMessages.length > 0) {
       const serverIds = new Set(serverMessages.map((m) => m.id));
@@ -143,7 +269,6 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
       if (localOnly.length === 0) return serverMessages as LocalMessage[];
       return [...(serverMessages as LocalMessage[]), ...localOnly];
     }
-    // No server data yet (new conv or loading) — show local optimistic messages
     return localMessages;
   }, [serverMessages, localMessages]);
 
@@ -158,9 +283,8 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [displayMessages.length, isSending]);
+  }, [displayMessages.length, isSending, scrollToBottom]);
 
-  // Conversation title from React Query cache
   const cachedConversations = queryClient.getQueryData<CachedConversation[]>(getListConversationsQueryKey());
   const conversationTitle = conversationId
     ? cachedConversations?.find((c) => c.id === conversationId)?.title
@@ -211,9 +335,9 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
       if (!currentConvId) return;
 
-      // Add optimistic message to local state immediately — visible while waiting
-      // for the AI response. For new conversations we do NOT navigate yet, so
-      // useListMessages stays disabled and cannot wipe the optimistic message.
+      // Add optimistic message immediately — visible while waiting for AI.
+      // For new conversations we're still at /chat so useListMessages is
+      // disabled and cannot overwrite localMessages.
       tempId = Date.now();
       const optimistic: LocalMessage = {
         id: tempId,
@@ -232,7 +356,6 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
       const assistantId = (response.assistantMessage as LocalMessage).id;
 
-      // Replace optimistic message with real server messages
       setLocalMessages((prev) => [
         ...prev.filter((m) => m.id !== tempId),
         response.userMessage as LocalMessage,
@@ -240,27 +363,22 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
       ]);
       setTypingMessageId(assistantId);
 
-      queryClient.setQueryData(getGetMeQueryKey(), (old: unknown) => {
-        if (!old || typeof old !== "object") return old;
-        return { ...(old as object), dailyMessagesUsed: response.dailyMessagesUsed };
-      });
+      // Safely invalidate (not setQueryData) so dailyMessagesUsed refreshes
+      // in the background without any risk of corrupting the auth cache.
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
 
-      // For new conversations: pre-populate the React Query cache with the real
-      // messages BEFORE navigating. When useListMessages(id) enables after the URL
-      // change it will find the cached data instantly — no loading state, no empty
-      // array that could flash the "Como posso ajudar?" screen.
       if (isNewConversation) {
+        // Pre-populate the messages cache so useListMessages finds data
+        // immediately when it enables after the URL change.
         queryClient.setQueryData(
           getListMessagesQueryKey(currentConvId),
           [response.userMessage, response.assistantMessage],
         );
-        // Mark that this URL change is caused by a send, so Effect 1 will NOT
-        // clear localMessages when conversationId changes.
-        navigatingAfterSendRef.current = true;
-        setLocation(`/chat/${currentConvId}`, { replace: true });
+        // Signal navigation via state — Effect 2 fires after isSending=false,
+        // guaranteeing all state is committed before the URL changes.
+        setPendingNavId(currentConvId);
       }
     } catch (e: unknown) {
-      // Remove the optimistic message on error so we don't show a stale bubble
       if (tempId !== -1) {
         setLocalMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
@@ -289,7 +407,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   };
 
@@ -297,6 +415,8 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   };
+
+  const firstName = user?.name?.split(" ")[0];
 
   return (
     <>
@@ -331,7 +451,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         )}
       </AnimatePresence>
 
-      <div className="flex-1 flex flex-col h-full bg-background">
+      <div className="flex-1 flex flex-col bg-background overflow-hidden">
         {/* Header */}
         <div className="h-14 flex items-center justify-between px-4 md:px-6 border-b border-white/[0.05] bg-background/80 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -366,8 +486,8 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
           )}
         </div>
 
-        {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-6">
+        {/* Messages area */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-6 overscroll-contain">
           {isLoadingMessages && displayMessages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-3 text-muted-foreground/40">
@@ -391,34 +511,53 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                 transition={{ duration: 0.4, delay: 0.1 }}
                 className="space-y-2"
               >
-                <h2 className="text-xl font-bold">Como posso ajudar?</h2>
+                <h2 className="text-xl font-bold">
+                  {firstName ? `Olá, ${firstName}` : "Como posso ajudar?"}
+                </h2>
                 <p className="text-sm text-muted-foreground/60 leading-relaxed">
                   Faça uma pergunta, envie um texto ou uma imagem.<br />A Nexa está pronta para você.
                 </p>
               </motion.div>
+              {/* Quick prompts */}
+              <motion.div
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+                className="flex flex-wrap justify-center gap-2 mt-1"
+              >
+                {["Explique um conceito", "Escreva um texto", "Analise um problema", "Crie uma ideia"].map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => setInputValue(prompt)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-white/[0.09] bg-white/[0.03] text-muted-foreground/60 hover:text-foreground hover:border-white/20 hover:bg-white/[0.06] transition-all"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </motion.div>
             </div>
           ) : (
-            <div className="space-y-4 max-w-3xl mx-auto">
+            <div className="space-y-5 max-w-3xl mx-auto pb-2">
               <AnimatePresence initial={false}>
                 {displayMessages.map((msg, idx) => (
                   <motion.div
                     key={msg.id}
-                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    initial={{ opacity: 0, y: 12, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.22, ease: "easeOut" }}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} gap-2.5`}
                   >
                     {msg.role === "assistant" && (
-                      <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mr-2.5 mt-1 self-start shadow-sm">
+                      <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 self-start shadow-sm">
                         <MessageSquare size={12} className="text-primary" strokeWidth={2} />
                       </div>
                     )}
                     <div
-                      className={`max-w-[84%] sm:max-w-[76%] ${
+                      className={`min-w-0 ${
                         msg.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-2xl rounded-tr-md shadow-lg shadow-primary/15"
-                          : "bg-card border border-white/[0.07] text-card-foreground rounded-2xl rounded-tl-md shadow-md"
-                      } px-4 py-3`}
+                          ? "max-w-[82%] sm:max-w-[74%] bg-primary text-primary-foreground rounded-2xl rounded-tr-md shadow-lg shadow-primary/15 px-4 py-3"
+                          : "max-w-[88%] sm:max-w-[82%] bg-card border border-white/[0.07] text-card-foreground rounded-2xl rounded-tl-md shadow-md px-4 py-3.5"
+                      }`}
                       data-testid={`message-${msg.role}-${idx}`}
                     >
                       {/* Image */}
@@ -439,27 +578,32 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                         </div>
                       )}
 
-                      {/* Nexa label */}
                       {msg.role === "assistant" && (
-                        <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-1.5">
+                        <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-2">
                           Nexa
                         </div>
                       )}
 
                       {/* Content */}
-                      <div className="text-[13px] leading-[1.65] whitespace-pre-wrap">
-                        {msg.role === "assistant" && typingMessageId === msg.id ? (
-                          <TypewriterText
-                            text={msg.content || ""}
-                            onComplete={() => {
-                              setTypingMessageId(null);
-                              scrollToBottom(true);
-                            }}
-                          />
-                        ) : (
-                          msg.content || "..."
-                        )}
-                      </div>
+                      {msg.role === "assistant" ? (
+                        <div className="text-[13px] leading-[1.7] prose-invert">
+                          {typingMessageId === msg.id ? (
+                            <TypewriterMarkdown
+                              text={msg.content || ""}
+                              onComplete={() => {
+                                setTypingMessageId(null);
+                                scrollToBottom(true);
+                              }}
+                            />
+                          ) : (
+                            <MarkdownContent content={msg.content || ""} />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[13px] leading-[1.65] whitespace-pre-wrap">
+                          {msg.content || "..."}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -472,13 +616,13 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="flex justify-start"
+                    className="flex justify-start gap-2.5"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mr-2.5 mt-1 self-start shadow-sm">
+                    <div className="w-7 h-7 rounded-lg bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 self-start shadow-sm">
                       <MessageSquare size={12} className="text-primary" strokeWidth={2} />
                     </div>
-                    <div className="bg-card border border-white/[0.07] rounded-2xl rounded-tl-md px-4 py-3 shadow-md">
-                      <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-2">
+                    <div className="bg-card border border-white/[0.07] rounded-2xl rounded-tl-md px-4 py-3.5 shadow-md">
+                      <div className="text-[10px] font-semibold text-primary/50 tracking-[0.15em] uppercase mb-2.5">
                         Nexa
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -502,11 +646,8 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         <div className="px-3 sm:px-5 md:px-8 py-3 md:py-4 bg-background shrink-0">
           <div className="max-w-3xl mx-auto">
             <div className="relative group">
-              {/* Glow border */}
               <div className="absolute -inset-px bg-gradient-to-r from-primary/20 via-violet-500/15 to-blue-500/20 rounded-[18px] blur-sm opacity-0 group-focus-within:opacity-100 transition-opacity duration-400 pointer-events-none" />
-
               <div className="relative bg-card border border-white/[0.09] rounded-[17px] shadow-xl focus-within:border-primary/30 transition-colors duration-200">
-                {/* Image preview */}
                 {pendingImage && (
                   <div className="px-3 pt-3">
                     <div className="relative inline-block">
@@ -565,7 +706,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
                   <Button
                     size="icon"
                     className="h-9 w-9 shrink-0 rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-all active:scale-95"
-                    onClick={handleSend}
+                    onClick={() => void handleSend()}
                     disabled={(!inputValue.trim() && !pendingImage) || isSending}
                     data-testid="button-send-chat"
                   >
