@@ -76,16 +76,9 @@ const SEARCH_KEYWORDS = [
   "pesquise", "busque", "procure", "encontre informações", "descubra",
 ];
 
-function shouldSearch(message: string, isPro: boolean): boolean {
+function shouldSearch(message: string, _isPro: boolean): boolean {
   const lower = message.toLowerCase();
-  if (isPro) {
-    // PRO: pesquisa sempre que a mensagem parecer precisar de info atual
-    const hasQuestion = lower.includes("?") || lower.startsWith("o que") ||
-      lower.startsWith("quem") || lower.startsWith("qual") ||
-      lower.startsWith("como") || lower.startsWith("quando") ||
-      lower.startsWith("onde") || lower.startsWith("por que");
-    if (hasQuestion && lower.length > 20) return true;
-  }
+  // Both plans search only when the query clearly needs current info
   return SEARCH_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
@@ -105,7 +98,7 @@ async function fetchGoogleNews(query: string, maxResults: number): Promise<NewsI
   const url = `https://news.google.com/rss/search?q=${encoded}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
 
   const res = await fetch(url, {
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(3000),
     headers: { "User-Agent": "Mozilla/5.0 (compatible; NexaBot/1.0)" },
   });
 

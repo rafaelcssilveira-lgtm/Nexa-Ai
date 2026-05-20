@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
+import { flushSync } from "react-dom";
 import { useLocation, useParams } from "wouter";
 import { AppLayout, useSidebarToggle } from "@/components/layout/AppLayout";
 import {
@@ -203,7 +204,11 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
 
       if (!currentConvId) return;
 
-      // ✅ Add optimistic message BEFORE navigating to the new URL
+      // ✅ Add optimistic message using flushSync so React commits the DOM update
+      // BEFORE setLocation fires. Wouter uses the browser History API directly
+      // (outside React's batch), so without flushSync the component would
+      // re-render with the new conversationId but localMessages still empty →
+      // isLoadingMessages && localMessages.length === 0 → black screen.
       tempId = Date.now();
       const optimistic: LocalMessage = {
         id: tempId,
@@ -213,9 +218,11 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         imageUrl: imageDataUrl ?? null,
         createdAt: new Date().toISOString(),
       };
-      setLocalMessages((prev) => [...prev, optimistic]);
+      flushSync(() => {
+        setLocalMessages((prev) => [...prev, optimistic]);
+      });
 
-      // ✅ Navigate AFTER optimistic message is in state
+      // ✅ Navigate only AFTER the DOM has the optimistic message committed
       if (!conversationId) {
         setLocation(`/chat/${currentConvId}`, { replace: true });
       }
@@ -238,10 +245,10 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         return { ...(old as object), dailyMessagesUsed: response.dailyMessagesUsed };
       });
     } catch (e: unknown) {
-      // Remove the optimistic message on failure
-      if (tempId !== -1) {
-        setLocalMessages((prev) => prev.filter((m) => m.id !== tempId));
-      }
+      // Keep the optimistic message visible so the screen doesn't go blank.
+      // Removing it from a new conversation (where it was the only message)
+      // would cause localMessages=[] and show the empty state ("outra tela").
+      // The user can retry by sending again.
       const err = e as { data?: { error?: string }; error?: string };
       const msg = err.data?.error || err.error;
       toast({
