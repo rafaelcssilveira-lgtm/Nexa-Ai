@@ -61,8 +61,6 @@ function SidebarContent({ onClose }: { onClose: () => void }) {
     });
   };
 
-  const usagePct = user ? Math.min((user.dailyMessagesUsed / user.dailyLimit) * 100, 100) : 0;
-
   return (
     <div className="flex flex-col h-full select-none">
       {/* Brand header */}
@@ -149,31 +147,18 @@ function SidebarContent({ onClose }: { onClose: () => void }) {
 
       {/* Bottom section */}
       <div className="border-t border-white/[0.05] p-3 space-y-2 shrink-0">
-        {/* Usage bar for FREE plan */}
         {user?.plan === "free" && (
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3 space-y-2">
-            <div className="flex justify-between items-center text-[11px] text-sidebar-foreground/40 font-medium">
-              <span>Uso diário</span>
-              <span>{user.dailyMessagesUsed}/{user.dailyLimit}</span>
-            </div>
-            <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary/60 rounded-full transition-all duration-500"
-                style={{ width: `${usagePct}%` }}
-              />
-            </div>
-            <Link href="/plans" onClick={onClose}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 justify-between px-1 mt-0.5"
-                data-testid="button-upgrade-sidebar"
-              >
-                <span className="flex items-center gap-1"><Sparkles size={10} /> Upgrade Pro</span>
-                <ChevronRight size={12} />
-              </Button>
-            </Link>
-          </div>
+          <Link href="/plans" onClick={onClose}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full h-8 text-xs text-primary hover:text-primary hover:bg-primary/10 justify-between px-2 rounded-xl border border-primary/20 hover:border-primary/40 transition-all"
+              data-testid="button-upgrade-sidebar"
+            >
+              <span className="flex items-center gap-1.5"><Sparkles size={10} /> Fazer upgrade para Pro</span>
+              <ChevronRight size={12} />
+            </Button>
+          </Link>
         )}
 
         {/* Nav links */}

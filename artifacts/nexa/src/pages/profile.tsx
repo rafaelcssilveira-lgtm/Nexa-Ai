@@ -83,20 +83,12 @@ export default function ProfilePage() {
               <div className="grid grid-cols-2 gap-4">
                 {[
                   {
-                    icon: <BarChart2 size={18} className="text-emerald-400" />,
-                    bg: "bg-emerald-400/10 border-emerald-400/15",
-                    label: "Uso hoje",
-                    value: `${profile.dailyMessagesUsed} / ${profile.dailyLimit}`,
-                    sub: "mensagens no dia",
-                    delay: 0.1,
-                  },
-                  {
                     icon: <MessageSquare size={18} className="text-primary" />,
                     bg: "bg-primary/10 border-primary/15",
                     label: "Total de mensagens",
                     value: profile.totalMessages.toLocaleString("pt-BR"),
                     sub: "mensagens enviadas",
-                    delay: 0.15,
+                    delay: 0.1,
                   },
                   {
                     icon: <Layers size={18} className="text-blue-400" />,
