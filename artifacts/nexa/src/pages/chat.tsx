@@ -103,6 +103,10 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Set to true immediately before calling setLocation inside handleSend so that
+  // Effect 1 knows the conversationId change was caused by a send (not by the
+  // user clicking a conversation) and skips clearing localMessages.
+  const navigatingAfterSendRef = useRef(false);
 
   const createConvMutation = useCreateConversation();
   const sendMessageMutation = useSendMessage();
@@ -118,13 +122,16 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     { query: { enabled: !!conversationId, queryKey: getListMessagesQueryKey(conversationId || 0) } }
   );
 
-  // When the user navigates to a different conversation (not during a send),
-  // clear local optimistic messages and stop any typewriter animation.
+  // When conversationId changes, clear local optimistic messages — UNLESS the
+  // change was triggered by a send operation (navigatingAfterSendRef), in which
+  // case localMessages must be preserved so messages don't flash away.
   useEffect(() => {
-    if (!isSendingRef.current) {
-      setLocalMessages([]);
-      setTypingMessageId(null);
+    if (navigatingAfterSendRef.current) {
+      navigatingAfterSendRef.current = false;
+      return;
     }
+    setLocalMessages([]);
+    setTypingMessageId(null);
   }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Merged display: prefer server data when available, append any local-only
@@ -247,6 +254,9 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
           getListMessagesQueryKey(currentConvId),
           [response.userMessage, response.assistantMessage],
         );
+        // Mark that this URL change is caused by a send, so Effect 1 will NOT
+        // clear localMessages when conversationId changes.
+        navigatingAfterSendRef.current = true;
         setLocation(`/chat/${currentConvId}`, { replace: true });
       }
     } catch (e: unknown) {
