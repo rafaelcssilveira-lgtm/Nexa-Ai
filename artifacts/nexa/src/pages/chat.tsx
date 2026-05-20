@@ -186,7 +186,7 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     setIsProcessing(true);
 
     let currentConvId = conversationId;
-    // Declare tempId here so catch can reference it to remove optimistic msg
+    // Declared here so the catch block can remove the optimistic message on error
     let tempId = -1;
 
     try {
@@ -196,13 +196,14 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         });
         currentConvId = newConv.id;
         queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-        // Navigate now — with the merged optional-param route in App.tsx this
-        // keeps the same component mounted; state and localMessages are preserved
-        setLocation(`/chat/${newConv.id}`, { replace: true });
+        // NOTE: do NOT call setLocation yet — we add the optimistic message first
+        // so that when the URL changes and the component re-renders, localMessages
+        // is already non-empty and the loading spinner (black screen) is suppressed.
       }
 
       if (!currentConvId) return;
 
+      // ✅ Add optimistic message BEFORE navigating to the new URL
       tempId = Date.now();
       const optimistic: LocalMessage = {
         id: tempId,
@@ -213,6 +214,11 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
         createdAt: new Date().toISOString(),
       };
       setLocalMessages((prev) => [...prev, optimistic]);
+
+      // ✅ Navigate AFTER optimistic message is in state
+      if (!conversationId) {
+        setLocation(`/chat/${currentConvId}`, { replace: true });
+      }
 
       const response = await sendMessageMutation.mutateAsync({
         id: currentConvId,
