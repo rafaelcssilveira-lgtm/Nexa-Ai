@@ -564,6 +564,78 @@ export const useCreateConversation = <TError = ErrorType<ErrorResponse>,
       return useMutation(getCreateConversationMutationOptions(options));
     }
 
+export const getUpdateConversationUrl = (id: number,) => {
+
+
+
+
+  return `/api/conversations/${id}`
+}
+
+/**
+ * @summary Rename a conversation
+ */
+export const updateConversation = async (id: number,
+    conversationInput: ConversationInput, options?: RequestInit): Promise<Conversation> => {
+
+  return customFetch<Conversation>(getUpdateConversationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      conversationInput,)
+  }
+);}
+
+
+
+
+export const getUpdateConversationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConversation>>, TError,{id: number;data: BodyType<ConversationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateConversation>>, TError,{id: number;data: BodyType<ConversationInput>}, TContext> => {
+
+const mutationKey = ['updateConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateConversation>>, {id: number;data: BodyType<ConversationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateConversation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateConversationMutationResult = NonNullable<Awaited<ReturnType<typeof updateConversation>>>
+    export type UpdateConversationMutationBody = BodyType<ConversationInput>
+    export type UpdateConversationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Rename a conversation
+ */
+export const useUpdateConversation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConversation>>, TError,{id: number;data: BodyType<ConversationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateConversation>>,
+        TError,
+        {id: number;data: BodyType<ConversationInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateConversationMutationOptions(options));
+    }
+
 export const getDeleteConversationUrl = (id: number,) => {
 
 

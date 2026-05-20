@@ -1,13 +1,21 @@
-import React, { useState, createContext, useContext } from "react";
+import React, { useState, createContext, useContext, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useLogoutUser, getGetMeQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
+import {
+  useLogoutUser,
+  getGetMeQueryKey,
+  useListConversations,
+  getListConversationsQueryKey,
+  useDeleteConversation,
+  useUpdateConversation,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { PenSquare, LogOut, MessageSquare, CreditCard, User, Sparkles, ChevronRight } from "lucide-react";
+import { PenSquare, LogOut, MessageSquare, CreditCard, User, Sparkles, ChevronRight, Trash2, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useToast } from "@/hooks/use-toast";
 
 export const SidebarContext = createContext({ openSidebar: () => {} });
 export const useSidebarToggle = () => useContext(SidebarContext);
@@ -40,6 +48,154 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ConversationItem({
+  conv,
+  isActive,
+  onClose,
+  onDeleted,
+}: {
+  conv: { id: number; title: string };
+  isActive: boolean;
+  onClose: () => void;
+  onDeleted: (id: number) => void;
+}) {
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(conv.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const deleteMutation = useDeleteConversation();
+  const updateMutation = useUpdateConversation();
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    deleteMutation.mutate(
+      { id: conv.id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+          onDeleted(conv.id);
+        },
+        onError: () => {
+          toast({ title: "Erro ao excluir", variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  const startRename = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRenameValue(conv.title);
+    setIsRenaming(true);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 50);
+  };
+
+  const confirmRename = () => {
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === conv.title) {
+      setIsRenaming(false);
+      return;
+    }
+    updateMutation.mutate(
+      { id: conv.id, data: { title: trimmed } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+          setIsRenaming(false);
+        },
+        onError: () => {
+          toast({ title: "Erro ao renomear", variant: "destructive" });
+          setIsRenaming(false);
+        },
+      },
+    );
+  };
+
+  const cancelRename = () => {
+    setRenameValue(conv.title);
+    setIsRenaming(false);
+  };
+
+  if (isRenaming) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1">
+        <input
+          ref={inputRef}
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") confirmRename();
+            if (e.key === "Escape") cancelRename();
+          }}
+          className="flex-1 min-w-0 bg-white/[0.07] border border-primary/30 rounded-lg px-2.5 py-1.5 text-[12.5px] text-foreground outline-none focus:border-primary/60 transition-colors"
+        />
+        <button
+          onClick={confirmRename}
+          className="w-6 h-6 rounded-md flex items-center justify-center text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors shrink-0"
+        >
+          <Check size={12} />
+        </button>
+        <button
+          onClick={cancelRename}
+          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-white/[0.06] transition-colors shrink-0"
+        >
+          <X size={12} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`group/conv relative flex items-center gap-2 rounded-xl px-3 py-2 cursor-pointer transition-all ${
+        isActive
+          ? "bg-primary/10 text-primary"
+          : "text-sidebar-foreground/50 hover:bg-white/[0.05] hover:text-sidebar-foreground/80"
+      }`}
+      onClick={() => {
+        setLocation(`/chat/${conv.id}`);
+        onClose();
+      }}
+      data-testid={`link-conversation-${conv.id}`}
+    >
+      <MessageSquare
+        size={12}
+        className={`shrink-0 transition-opacity ${isActive ? "opacity-70" : "opacity-30 group-hover/conv:opacity-50"}`}
+      />
+      <span className="flex-1 truncate text-[13px]">{conv.title}</span>
+
+      {/* Botões inline — aparecem ao hover */}
+      <div
+        className="flex items-center gap-0.5 opacity-0 group-hover/conv:opacity-100 transition-opacity shrink-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={startRename}
+          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-foreground/70 hover:bg-white/[0.08] transition-colors"
+          title="Renomear"
+        >
+          <Pencil size={11} />
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-destructive/80 hover:bg-destructive/10 transition-colors disabled:opacity-40"
+          title="Excluir"
+        >
+          <Trash2 size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SidebarContent({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -59,6 +215,14 @@ function SidebarContent({ onClose }: { onClose: () => void }) {
         setLocation("/");
       },
     });
+  };
+
+  const handleDeleted = (id: number) => {
+    const activeConvId = location.startsWith("/chat/") ? Number(location.split("/chat/")[1]) : null;
+    if (activeConvId === id) {
+      setLocation("/chat");
+    }
+    onClose();
   };
 
   return (
@@ -123,22 +287,13 @@ function SidebarContent({ onClose }: { onClose: () => void }) {
             conversations.map((conv) => {
               const isActive = location === `/chat/${conv.id}`;
               return (
-                <Link key={conv.id} href={`/chat/${conv.id}`} onClick={onClose}>
-                  <div
-                    className={`w-full text-left px-3 py-2 rounded-xl text-[13px] truncate cursor-pointer transition-all flex items-center gap-2 group ${
-                      isActive
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-sidebar-foreground/50 hover:bg-white/[0.05] hover:text-sidebar-foreground/80"
-                    }`}
-                    data-testid={`link-conversation-${conv.id}`}
-                  >
-                    <MessageSquare
-                      size={12}
-                      className={`shrink-0 transition-opacity ${isActive ? "opacity-70" : "opacity-30 group-hover:opacity-50"}`}
-                    />
-                    <span className="truncate">{conv.title}</span>
-                  </div>
-                </Link>
+                <ConversationItem
+                  key={conv.id}
+                  conv={conv}
+                  isActive={isActive}
+                  onClose={onClose}
+                  onDeleted={handleDeleted}
+                />
               );
             })
           )}

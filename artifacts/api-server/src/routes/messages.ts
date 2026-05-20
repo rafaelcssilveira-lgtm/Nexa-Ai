@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, messagesTable, conversationsTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, getDailyLimit, shouldResetDailyMessages } from "../lib/auth";
-import { generateAiResponse } from "../lib/ai";
+import { generateAiResponse, generateConversationTitle } from "../lib/ai";
 import { SendMessageBody, SendMessageParams, ListMessagesParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -137,10 +137,24 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     .set({ dailyMessagesUsed: newDailyCount })
     .where(eq(usersTable.id, userId));
 
-  await db
-    .update(conversationsTable)
-    .set({ updatedAt: new Date() })
-    .where(eq(conversationsTable.id, params.data.id));
+  // Auto-gerar título via IA na primeira mensagem da conversa
+  const messageCount = history.length; // history já inclui a mensagem do usuário recém inserida
+  if (messageCount === 1) {
+    // Não bloqueia a resposta — roda em background
+    void generateConversationTitle(content).then((title) => {
+      return db
+        .update(conversationsTable)
+        .set({ title, updatedAt: new Date() })
+        .where(eq(conversationsTable.id, params.data.id));
+    }).catch(() => {
+      // Se falhar, a conversa mantém o título original
+    });
+  } else {
+    await db
+      .update(conversationsTable)
+      .set({ updatedAt: new Date() })
+      .where(eq(conversationsTable.id, params.data.id));
+  }
 
   res.status(201).json({
     userMessage,

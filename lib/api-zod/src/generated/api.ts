@@ -99,6 +99,29 @@ export const CreateConversationBody = zod.object({
 
 
 /**
+ * @summary Rename a conversation
+ */
+export const UpdateConversationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateConversationBody = zod.object({
+  "title": zod.string().min(1)
+})
+
+export const UpdateConversationResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "messageCount": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Delete a conversation
  */
 export const DeleteConversationParams = zod.object({

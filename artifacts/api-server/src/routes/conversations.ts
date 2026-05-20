@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, conversationsTable, messagesTable } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
-import { CreateConversationBody, DeleteConversationParams } from "@workspace/api-zod";
+import { CreateConversationBody, DeleteConversationParams, UpdateConversationBody, UpdateConversationParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -55,6 +55,48 @@ router.post("/conversations", requireAuth, async (req, res): Promise<void> => {
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
   });
+});
+
+router.patch("/conversations/:id", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+
+  const params = DeleteConversationParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = UpdateConversationBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [updated] = await db
+    .update(conversationsTable)
+    .set({ title: body.data.title })
+    .where(and(eq(conversationsTable.id, params.data.id), eq(conversationsTable.userId, userId)))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Conversa não encontrada" });
+    return;
+  }
+
+  const [withCount] = await db
+    .select({
+      id: conversationsTable.id,
+      title: conversationsTable.title,
+      createdAt: conversationsTable.createdAt,
+      updatedAt: conversationsTable.updatedAt,
+      messageCount: count(messagesTable.id),
+    })
+    .from(conversationsTable)
+    .leftJoin(messagesTable, eq(messagesTable.conversationId, conversationsTable.id))
+    .where(eq(conversationsTable.id, updated.id))
+    .groupBy(conversationsTable.id);
+
+  res.json(withCount);
 });
 
 router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void> => {

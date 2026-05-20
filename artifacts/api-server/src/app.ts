@@ -34,8 +34,9 @@ app.use(
   }),
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Aumentado para 20mb para suportar imagens base64 de câmeras mobile
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {

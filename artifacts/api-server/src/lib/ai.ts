@@ -157,6 +157,29 @@ function buildNewsContext(news: NewsItem[]): string {
   return `\n\n---\nNotícias recentes encontradas na internet:\n${lines.join("\n")}\n\nUse essas notícias na sua resposta incluindo os links no formato Markdown quando relevante.\n---`;
 }
 
+// ─── Title generation ─────────────────────────────────────────────────────────
+
+export async function generateConversationTitle(firstUserMessage: string): Promise<string> {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Gere um título curto e descritivo (máximo 5 palavras, sem aspas, sem pontuação final) para uma conversa que começa com a seguinte mensagem do usuário. Responda APENAS com o título, nada mais.",
+        },
+        { role: "user", content: firstUserMessage.substring(0, 300) },
+      ],
+      max_completion_tokens: 20,
+      temperature: 0.5,
+    });
+    const title = completion.choices[0]?.message?.content?.trim() ?? "";
+    return title.length > 0 && title.length <= 60 ? title : firstUserMessage.substring(0, 40);
+  } catch {
+    return firstUserMessage.substring(0, 40);
+  }
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function generateAiResponse(
