@@ -119,21 +119,26 @@ function ChatArea({ conversationId }: { conversationId?: number }) {
     { query: { enabled: !!conversationId, queryKey: getListMessagesQueryKey(conversationId || 0) } }
   );
 
-  // Sync server → local only when NOT sending (avoids flash)
+  // Effect 1: When the user navigates to a different conversation, clear local
+  // messages immediately (so we don't flash old messages) — but ONLY if we are
+  // not mid-send (which also changes conversationId via setLocation).
   useEffect(() => {
     if (isSendingRef.current) return;
-    if (serverMessages) {
+    setLocalMessages([]);
+    setTypingMessageId(null);
+  }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Effect 2: Sync real server messages into local state.
+  // IMPORTANT: only run when there are actual messages (length > 0).
+  // An empty array [] is falsy-equivalent here — returning [] from the
+  // server for a brand-new conversation must NOT wipe the optimistic message.
+  useEffect(() => {
+    if (isSendingRef.current) return;
+    if (serverMessages && serverMessages.length > 0) {
       setLocalMessages(serverMessages as LocalMessage[]);
       setTypingMessageId(null);
-    } else if (!conversationId) {
-      setLocalMessages([]);
     }
-  }, [serverMessages, conversationId]);
-
-  // Reset typing when conversation changes
-  useEffect(() => {
-    setTypingMessageId(null);
-  }, [conversationId]);
+  }, [serverMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scrollToBottom = useCallback((smooth = false) => {
     if (scrollRef.current) {
