@@ -1,2 +1,1 @@
 # Nexa-Ai
-# Nexa-Ai
